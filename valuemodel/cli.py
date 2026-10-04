@@ -3,7 +3,9 @@
 import argparse
 import logging
 import sys
+import time
 from collections.abc import Callable, Sequence
+from difflib import get_close_matches
 
 import pandas as pd
 
@@ -64,7 +66,7 @@ def _decimal_odds(value: str) -> float:
     return odds
 
 
-def _add_model_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_league(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--league",
         default=DEFAULT_LEAGUES[0],
@@ -72,6 +74,21 @@ def _add_model_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="CODE",
         help="league code (default: %(default)s)",
     )
+
+
+def _add_leagues(parser: argparse.ArgumentParser, purpose: str) -> None:
+    parser.add_argument(
+        "--leagues",
+        nargs="+",
+        default=list(DEFAULT_LEAGUES),
+        type=_argument(validate_league),
+        metavar="CODE",
+        help=f"{purpose} (default: %(default)s)",
+    )
+
+
+def _add_model_arguments(parser: argparse.ArgumentParser) -> None:
+    _add_league(parser)
     parser.add_argument(
         "--model",
         choices=list(MODELS),
@@ -87,14 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     download = commands.add_parser(
         "download", help="download and cache results and odds from football-data.co.uk"
     )
-    download.add_argument(
-        "--leagues",
-        nargs="+",
-        default=list(DEFAULT_LEAGUES),
-        type=_argument(validate_league),
-        metavar="CODE",
-        help="league codes such as E0 (default: %(default)s)",
-    )
+    _add_leagues(download, "league codes such as E0")
     download.add_argument(
         "--seasons",
         nargs="+",
@@ -125,25 +135,12 @@ def build_parser() -> argparse.ArgumentParser:
         "fixtures",
         help="download upcoming fixtures and refresh this season's results for the dashboard",
     )
-    fixtures.add_argument(
-        "--leagues",
-        nargs="+",
-        default=list(DEFAULT_LEAGUES),
-        type=_argument(validate_league),
-        metavar="CODE",
-        help="leagues whose current season results to refresh (default: %(default)s)",
-    )
+    _add_leagues(fixtures, "leagues whose current season results to refresh")
 
     backtest = commands.add_parser(
         "backtest", help="walk forward through past seasons with paper bets and print a report"
     )
-    backtest.add_argument(
-        "--league",
-        default=DEFAULT_LEAGUES[0],
-        type=_argument(validate_league),
-        metavar="CODE",
-        help="league code (default: %(default)s)",
-    )
+    _add_league(backtest)
     backtest.add_argument(
         "--seasons",
         nargs="+",
@@ -279,7 +276,10 @@ def run_predict(
         probabilities = predict(fitted, home, away)
         home_goals, away_goals = fitted.expected_goals(home, away)
     except UnknownTeamError as error:
-        print(f"error: {error}", file=sys.stderr)
+        unknown = home if home not in fitted.teams else away
+        suggestions = get_close_matches(unknown, fitted.teams, n=3)
+        hint = f" Did you mean {' or '.join(suggestions)}?" if suggestions else ""
+        print(f"error: {error}.{hint}", file=sys.stderr)
         return 1
 
     # With only a handful of results a team's estimates can run to extremes, for
@@ -307,6 +307,7 @@ def run_fixtures(leagues: Sequence[str]) -> int:
     try:
         with make_client() as client:
             path = download_fixtures(client, settings)
+            time.sleep(settings.request_delay)
             download_seasons(client, leagues, [season], settings, force=True)
     except DownloadError as error:
         print(f"error: {error}", file=sys.stderr)

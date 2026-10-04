@@ -10,10 +10,12 @@ from valuemodel import cli
 
 
 @pytest.fixture
-def fake_site(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, source: FakeSource) -> FakeSource:
-    monkeypatch.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("VALUEMODEL_REQUEST_DELAY", "0")
-    monkeypatch.setattr(cli, "make_client", source.client)
+def fake_site(
+    clean_environment: pytest.MonkeyPatch, tmp_path: Path, source: FakeSource
+) -> FakeSource:
+    clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
+    clean_environment.setenv("VALUEMODEL_REQUEST_DELAY", "0")
+    clean_environment.setattr(cli, "make_client", source.client)
     return source
 
 
@@ -110,10 +112,17 @@ def test_predict_unknown_team(
     assert "Nobody has no matches" in capsys.readouterr().err
 
 
-def test_missing_cache_is_reported(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_predict_suggests_close_team_names(
+    simulated_cache: pd.DataFrame, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
+    assert cli.main(["predict", "--home", "Teem 03", "--away", "Team 01"]) == 1
+    assert "Did you mean Team 03" in capsys.readouterr().err
+
+
+def test_missing_cache_is_reported(
+    clean_environment: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
     assert cli.main(["predict", "--home", "Arsenal", "--away", "Chelsea"]) == 1
     assert "valuemodel download" in capsys.readouterr().err
 
