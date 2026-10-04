@@ -210,6 +210,8 @@ In every band the bets won less often than the model expected, and the bets it w
 
 The same backtest was run on the Championship, with every setting left exactly as tuned on the Premier League. The model never saw Championship data while its settings were chosen, which makes this a clean out-of-sample test. To reproduce it, run `valuemodel download --leagues E1` and then `valuemodel backtest --league E1`.
 
+![Dashboard summary page for the Championship backtest](docs/screenshot-championship.png)
+
 | Strategy | Bets | Mean CLV | Beat the close | ROI | Final bankroll | Level-stakes ROI (95% interval) |
 | --- | --- | --- | --- | --- | --- | --- |
 | Shots-adjusted | 1,779 | -5.6% | 19.3% | -4.9% | 154 | -3.5% (-10.0% to +3.0%) |
