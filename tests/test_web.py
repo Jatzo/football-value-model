@@ -119,6 +119,7 @@ def test_fixtures_page_before_any_download(empty_client: FlaskClient, settings: 
     assert not database_path(settings).exists()
     assert "No fixtures downloaded yet" in html
     assert "No season schedule downloaded yet" in html
+    assert "Suggested slips are built from value bets" in html
     assert "valuemodel fixtures" in html
 
 
@@ -224,6 +225,7 @@ def test_fixtures_page_without_value_says_so(empty_client: FlaskClient, settings
     )
     html = empty_client.get("/fixtures").get_data(as_text=True)
     assert "None of the listed games has a value bet" in html
+    assert "nothing to build a slip from yet" in html
 
 
 def test_calculator_lists_each_game_once_with_its_odds() -> None:
