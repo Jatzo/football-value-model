@@ -2,7 +2,8 @@
 
 football-data.co.uk is the single source of names, so its spellings are the
 canonical ones. Aliases are only added for variants actually seen in the data.
-A scan of E0 from 2021/22 to 2025/26 found none, so the table starts empty.
+A scan of every Premier League season the project uses, 2019/20 to
+2026/27, found none, so the table is empty. Other leagues may need entries.
 """
 
 from collections.abc import Mapping
