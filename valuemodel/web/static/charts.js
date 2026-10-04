@@ -23,7 +23,7 @@
   function drawBankroll() {
     const data = readData("bankroll-data");
     const canvas = document.getElementById("bankroll-chart");
-    if (!data || !canvas) return;
+    if (!data || !data.length || !canvas) return;
 
     const datasets = data.map((series, index) => ({
       label: series.name,
@@ -66,7 +66,7 @@
   function drawCalibration() {
     const data = readData("calibration-data");
     const canvas = document.getElementById("calibration-chart");
-    if (!data || !canvas) return;
+    if (!data || !data.length || !canvas) return;
 
     const datasets = data.map((series, index) => ({
       label: series.name,

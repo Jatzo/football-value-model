@@ -71,3 +71,12 @@ def test_latest_run_id(tmp_path: Path, result: BacktestResult) -> None:
 def test_unknown_run_raises(tmp_path: Path) -> None:
     with pytest.raises(KeyError, match="No backtest run"):
         load_run(connect(tmp_path / "runs.sqlite"), 99)
+
+
+def test_round_trip_of_a_run_without_bets(tmp_path: Path, result: BacktestResult) -> None:
+    empty = BacktestResult(
+        **{**result.__dict__, "bets": {name: bets.iloc[0:0] for name, bets in result.bets.items()}}
+    )
+    connection = connect(tmp_path / "runs.sqlite")
+    loaded = load_run(connection, save_run(connection, empty))
+    assert all(len(bets) == 0 for bets in loaded.bets.values())

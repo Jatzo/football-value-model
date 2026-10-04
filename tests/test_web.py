@@ -26,6 +26,19 @@ def result() -> BacktestResult:
     return run_backtest(add_odds(league, model, rng), "E0", ["2324"], Settings(), min_matches=0)
 
 
+@pytest.fixture(scope="module")
+def result_without_bets() -> BacktestResult:
+    rng = np.random.default_rng(17)
+    model = true_model(8, -0.1, rng)
+    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
+    league = pd.concat(
+        [simulate_league(model, 1, rng, start=start, season=code) for code, start in seasons],
+        ignore_index=True,
+    )
+    settings = Settings(edge_threshold=100.0)
+    return run_backtest(add_odds(league, model, rng), "E0", ["2324"], settings, min_matches=0)
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return Settings(data_dir=tmp_path)
@@ -202,3 +215,30 @@ def test_scores_verdict(model_rps: float, says: str) -> None:
         }
     )
     assert says in views.scores_verdict(scores)
+
+
+@pytest.mark.parametrize("path", ["/", "/bets", "/models"])
+def test_pages_for_a_run_without_bets(
+    settings: Settings, result_without_bets: BacktestResult, path: str
+) -> None:
+    connection = connect(database_path(settings))
+    save_run(connection, result_without_bets)
+    connection.close()
+    response = create_app(settings).test_client().get(path)
+    assert response.status_code == 200
+    if path == "/":
+        html = response.get_data(as_text=True)
+        assert "Bets placed" in html
+        assert "No bets were placed" in html
+        assert embedded_json(html, "bankroll-data") == []
+
+
+def test_clv_explanation_follows_the_sign(result: BacktestResult) -> None:
+    negative = result.summary.assign(mean_clv=-0.05)
+    positive = result.summary.assign(mean_clv=0.02)
+    assert "negative" in views.clv_explanation(
+        BacktestResult(**{**result.__dict__, "summary": negative})
+    )
+    assert "positive" in views.clv_explanation(
+        BacktestResult(**{**result.__dict__, "summary": positive})
+    )

@@ -42,6 +42,14 @@ def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> lis
     """The figures that matter most, closing line value first."""
     row = result.summary.set_index("strategy").loc[strategy]
     start = result.settings.starting_bankroll
+    if not row["bets"]:
+        return [
+            Card(
+                "Bets placed",
+                "0",
+                note=f"no outcome reached the {result.settings.edge_threshold:.0%} edge threshold",
+            )
+        ]
     return [
         Card(
             "Mean closing line value",
@@ -74,6 +82,28 @@ def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> lis
             f"{int(row['longest_losing_run'])}",
         ),
     ]
+
+
+def clv_explanation(result: BacktestResult, strategy: str = "dixon-coles") -> str:
+    """Explain closing line value in terms of what this run actually shows."""
+    mean_clv = result.summary.set_index("strategy").loc[strategy, "mean_clv"]
+    intro = (
+        "Closing line value compares each price taken with Pinnacle's closing price after its "
+        "margin is removed. It is the most reliable sign of a real edge, because it is far less "
+        "noisy than profit."
+    )
+    if is_missing(mean_clv):
+        return f"{intro} No bets in this run had a closing price to compare with."
+    if mean_clv < 0:
+        return (
+            f"{intro} Here it is negative: the market moved against the model's selections more "
+            "often than not. The model finds prices where it disagrees with the market, and the "
+            "market tends to be right."
+        )
+    return (
+        f"{intro} Here it is positive: on average the prices taken beat the close, which would "
+        "be evidence of an edge if it holds over enough bets."
+    )
 
 
 def bankroll_series(result: BacktestResult) -> list[dict[str, object]]:

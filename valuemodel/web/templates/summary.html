@@ -21,17 +21,16 @@
 
 <section class="panel">
   <h2>What this shows</h2>
-  <p>
-    Closing line value compares each price taken with Pinnacle's closing price after its margin is removed.
-    It is the most reliable sign of a real edge, because it is far less noisy than profit.
-    A negative figure means the market moved against the model's selections more often than not:
-    the model is finding prices where it disagrees with the market, and the market tends to be right.
-  </p>
+  <p>{{ explanation }}</p>
 </section>
 
 <section class="panel">
   <h2>Bankroll</h2>
+  {% if bankroll %}
   <div class="chart-box"><canvas id="bankroll-chart" aria-label="Bankroll over time for each strategy" role="img"></canvas></div>
+  {% else %}
+  <p class="muted">No bets were placed, so the bankroll never moved.</p>
+  {% endif %}
   <script id="bankroll-data" type="application/json">{{ bankroll | tojson }}</script>
 </section>
 

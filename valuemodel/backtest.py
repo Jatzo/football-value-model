@@ -128,7 +128,8 @@ def max_drawdown(bankroll: np.ndarray) -> tuple[float, float]:
     peaks = np.maximum.accumulate(bankroll)
     falls = peaks - bankroll
     worst = int(np.argmax(falls))
-    return float(falls[worst]), float(falls[worst] / peaks[worst]) if peaks[worst] else 0.0
+    share = falls[worst] / peaks[worst] if peaks[worst] else 0.0
+    return float(falls[worst]), float(share)
 
 
 def longest_losing_run(won: Iterable[bool]) -> int:
@@ -139,7 +140,7 @@ def longest_losing_run(won: Iterable[bool]) -> int:
     return longest
 
 
-def betting_summary(bets: pd.DataFrame, starting_bankroll: float) -> dict[str, float]:
+def betting_summary(bets: pd.DataFrame, starting_bankroll: float) -> dict[str, float | int]:
     """Headline betting figures, plus level-stakes ROI with a bootstrap interval.
 
     Level stakes put one unit on every bet, so the ROI does not depend on the
@@ -147,7 +148,21 @@ def betting_summary(bets: pd.DataFrame, starting_bankroll: float) -> dict[str, f
     shows how much of the result could be luck.
     """
     if bets.empty:
-        return {"bets": 0, "staked": 0.0, "profit": 0.0, "roi": np.nan}
+        return {
+            "bets": 0,
+            "win_rate": np.nan,
+            "mean_odds": np.nan,
+            "staked": 0.0,
+            "profit": 0.0,
+            "roi": np.nan,
+            "final_bankroll": starting_bankroll,
+            "max_drawdown": 0.0,
+            "max_drawdown_share": 0.0,
+            "longest_losing_run": 0,
+            "level_roi": np.nan,
+            "level_roi_low": np.nan,
+            "level_roi_high": np.nan,
+        }
     curve = np.concatenate([[starting_bankroll], bets["bankroll"].to_numpy()])
     drawdown, drawdown_share = max_drawdown(curve)
     level_returns = np.where(bets["won"], bets["odds"] - 1, -1.0)

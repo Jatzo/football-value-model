@@ -94,6 +94,7 @@ def summary() -> str:
     return _render_run_page(
         "summary.html",
         cards=views.headline_cards,
+        explanation=views.clv_explanation,
         bankroll=views.bankroll_series,
     )
 
