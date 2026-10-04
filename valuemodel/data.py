@@ -91,6 +91,16 @@ MATCH_COLUMNS: tuple[str, ...] = (
     "result",
 )
 
+# Shot counts feed the shot-based expected goals. Older or partial files may
+# lack them, in which case they are left empty rather than rejected.
+SHOT_SOURCES: dict[str, str] = {
+    "home_shots": "HS",
+    "away_shots": "AS",
+    "home_shots_on_target": "HST",
+    "away_shots_on_target": "AST",
+}
+SHOT_COLUMNS: tuple[str, ...] = tuple(SHOT_SOURCES)
+
 
 def decode(raw: bytes) -> str:
     """Decode a downloaded file, allowing for a UTF-8 byte order mark.
@@ -164,6 +174,9 @@ def standardise(
     for side in ("home_goals", "away_goals"):
         frame[side] = pd.to_numeric(core.get(side, empty), errors="coerce").astype("Int64")
     frame["result"] = core.get("result", empty).str.strip()
+    for column, name in SHOT_SOURCES.items():
+        values = raw.get(name, empty)
+        frame[column] = pd.to_numeric(values, errors="coerce").astype("Int64")
     for column, names in ODDS_CANDIDATES.items():
         frame[column] = _odds(_first_present(raw, names), raw.index)
     return frame
@@ -323,6 +336,6 @@ def load_available(
         if (path := cache_path(settings.raw_dir, league, season)).exists()
     ]
     if not frames:
-        return pd.DataFrame(columns=[*MATCH_COLUMNS, *ODDS_COLUMNS])
+        return pd.DataFrame(columns=[*MATCH_COLUMNS, *SHOT_COLUMNS, *ODDS_COLUMNS])
     matches = pd.concat(frames, ignore_index=True)
     return matches.sort_values(["date", "kickoff", "league", "home_team"]).reset_index(drop=True)

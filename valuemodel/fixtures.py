@@ -16,6 +16,7 @@ from valuemodel.config import MIN_TEAM_MATCHES, Settings, current_season
 from valuemodel.data import (
     MATCH_COLUMNS,
     ODDS_COLUMNS,
+    SHOT_COLUMNS,
     download_csv,
     odds_columns,
     read_raw,
@@ -47,7 +48,7 @@ def load_fixtures(path: Path) -> pd.DataFrame:
     """Read the fixtures file into the standard columns, one league at a time."""
     raw = read_raw(path)
     if raw.empty:
-        return pd.DataFrame(columns=[*MATCH_COLUMNS, *ODDS_COLUMNS])
+        return pd.DataFrame(columns=[*MATCH_COLUMNS, *SHOT_COLUMNS, *ODDS_COLUMNS])
     season = current_season()
     frames = [
         standardise(group, str(league), season, has_results=False)

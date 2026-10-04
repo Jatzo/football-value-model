@@ -6,6 +6,7 @@ import pytest
 from valuemodel.data import (
     MATCH_COLUMNS,
     ODDS_COLUMNS,
+    SHOT_COLUMNS,
     decode,
     parse_dates,
     read_raw,
@@ -22,7 +23,7 @@ def load_fixture(fixtures_dir: Path, season: str) -> pd.DataFrame:
 @pytest.mark.parametrize("season", SEASONS)
 def test_every_era_maps_to_the_same_schema(fixtures_dir: Path, season: str) -> None:
     frame = load_fixture(fixtures_dir, season)
-    assert tuple(frame.columns) == MATCH_COLUMNS + ODDS_COLUMNS
+    assert tuple(frame.columns) == MATCH_COLUMNS + SHOT_COLUMNS + ODDS_COLUMNS
     assert len(frame) == 20
     assert frame["date"].notna().all()
     assert frame["home_goals"].dtype == "Int64"
@@ -140,3 +141,25 @@ def test_missing_required_column_is_reported() -> None:
     raw = pd.DataFrame({"Date": ["08/08/2015"], "HomeTeam": ["Chelsea"]})
     with pytest.raises(ValueError, match="missing required columns"):
         standardise(raw, "E0", "1516")
+
+
+def test_shot_counts_are_kept(fixtures_dir: Path) -> None:
+    first = load_fixture(fixtures_dir, "2526").iloc[0]
+    assert (first["home_shots"], first["away_shots"]) == (19, 10)
+    assert (first["home_shots_on_target"], first["away_shots_on_target"]) == (10, 3)
+
+
+def test_missing_shot_columns_are_left_empty() -> None:
+    raw = pd.DataFrame(
+        {
+            "Date": ["08/08/2015"],
+            "HomeTeam": ["Chelsea"],
+            "AwayTeam": ["Swansea"],
+            "FTHG": ["2"],
+            "FTAG": ["2"],
+            "FTR": ["D"],
+        }
+    )
+    row = standardise(raw, "E0", "1516").iloc[0]
+    assert pd.isna(row["home_shots"])
+    assert pd.isna(row["away_shots_on_target"])
