@@ -11,7 +11,7 @@ import pandas as pd
 
 from valuemodel.backtest import BacktestResult
 from valuemodel.config import DEFAULT_SEASONS, DEFAULT_XI, LEAGUES, Settings, current_season
-from valuemodel.data import cache_path, load_season
+from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
 
 PER_PAGE = 50
@@ -287,18 +287,6 @@ class FixturesView:
     latest_result: dict[str, str] = field(default_factory=dict)
 
 
-def cached_history(settings: Settings, leagues: list[str]) -> pd.DataFrame:
-    """Every cached season for these leagues, including the one in progress."""
-    seasons = list(dict.fromkeys([*DEFAULT_SEASONS, current_season()]))
-    frames = [
-        load_season(path, league, season)
-        for league in leagues
-        for season in seasons
-        if (path := cache_path(settings.raw_dir, league, season)).exists()
-    ]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-
-
 def fixtures_view(settings: Settings) -> FixturesView:
     path = fixtures_path(settings)
     if not path.exists():
@@ -308,7 +296,7 @@ def fixtures_view(settings: Settings) -> FixturesView:
         return FixturesView(status="empty", fetched=fetched_at(path))
 
     leagues = [league for league in dict.fromkeys(fixtures["league"]) if league in LEAGUES]
-    history = cached_history(settings, leagues)
+    history = load_available(leagues, [*DEFAULT_SEASONS, current_season()], settings)
     if history.empty:
         return FixturesView(
             status="no_history",

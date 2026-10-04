@@ -283,14 +283,32 @@ def load_matches(
     leagues: Iterable[str], seasons: Iterable[str], settings: Settings
 ) -> pd.DataFrame:
     """Load cached seasons into one date-ordered frame. Nothing is downloaded here."""
-    frames = []
+    leagues, seasons = list(leagues), list(seasons)
     for league in leagues:
         for season in seasons:
-            path = cache_path(settings.raw_dir, league, season)
-            if not path.exists():
+            if not cache_path(settings.raw_dir, league, season).exists():
                 raise FileNotFoundError(
                     f"No cached data for {league} {season}. Run: valuemodel download"
                 )
-            frames.append(load_season(path, league, season))
+    return load_available(leagues, seasons, settings)
+
+
+def load_available(
+    leagues: Iterable[str], seasons: Iterable[str], settings: Settings
+) -> pd.DataFrame:
+    """Load whichever of these seasons are cached, skipping the rest.
+
+    Used where the season in progress may or may not have been fetched yet.
+    The result is empty when nothing is cached.
+    """
+    seasons = list(seasons)
+    frames = [
+        load_season(path, league, season)
+        for league in leagues
+        for season in seasons
+        if (path := cache_path(settings.raw_dir, league, season)).exists()
+    ]
+    if not frames:
+        return pd.DataFrame(columns=[*MATCH_COLUMNS, *ODDS_COLUMNS])
     matches = pd.concat(frames, ignore_index=True)
     return matches.sort_values(["date", "kickoff", "league", "home_team"]).reset_index(drop=True)

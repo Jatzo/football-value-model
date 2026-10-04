@@ -9,6 +9,7 @@ from valuemodel.data import (
     cache_path,
     download_season,
     download_seasons,
+    load_available,
     load_matches,
     season_url,
 )
@@ -88,3 +89,11 @@ def test_load_matches_combines_seasons_in_date_order(
 def test_load_matches_needs_a_cached_file(settings: Settings) -> None:
     with pytest.raises(FileNotFoundError, match="valuemodel download"):
         load_matches(["E0"], ["2526"], settings)
+
+
+def test_load_available_skips_missing_seasons(source: FakeSource, settings: Settings) -> None:
+    download_seasons(source.client(), ["E0"], ["2526"], settings, sleep=lambda _: None)
+    matches = load_available(["E0"], ["2425", "2526"], settings)
+    assert len(matches) == 20
+    assert set(matches["season"]) == {"2526"}
+    assert load_available(["E1"], ["2526"], settings).empty
