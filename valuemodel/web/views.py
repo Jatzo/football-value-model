@@ -401,11 +401,17 @@ def fixtures_view(settings: Settings) -> FixturesView:
             unpriced_leagues=dict.fromkeys(fixtures["league"], "no cached results"),
         )
     priced = price_fixtures(history, fixtures, settings, MODEL_XI[MAIN_MODEL])
+    if not priced.priced_leagues:
+        return FixturesView(
+            status="no_history",
+            fetched=fetched_at(path),
+            unpriced_leagues=priced.unpriced_leagues,
+        )
     latest = {
         league: str(group["date"].max().date()) for league, group in history.groupby("league")
     }
     return FixturesView(
-        status="ok" if priced.priced_leagues else "no_history",
+        status="ok",
         fetched=fetched_at(path),
         rows={league: fixture_rows(priced.fixtures, league) for league in priced.priced_leagues},
         priced_leagues=priced.priced_leagues,

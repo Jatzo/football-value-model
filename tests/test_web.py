@@ -133,6 +133,26 @@ def test_fixtures_page_without_history(
         assert league in html
 
 
+def test_fixtures_page_when_only_history_leagues_have_results(
+    empty_client: FlaskClient, settings: Settings, fixtures_dir: Path
+) -> None:
+    """League One results are cached for the Championship, but its fixtures are never priced."""
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "fixtures.csv").write_bytes((fixtures_dir / "upcoming.csv").read_bytes())
+    rng = np.random.default_rng(4)
+    league_one = simulate_league(
+        true_model(6, -0.1, rng), 1, rng, start="2025-08-01", season="2526"
+    )
+    (settings.raw_dir / "E2_2526.csv").write_text(
+        raw_season(league_one.assign(league="E2")), encoding="utf-8"
+    )
+    response = empty_client.get("/fixtures")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "No fixtures for the leagues with cached results" in html
+    assert "E2" in html
+
+
 def raw_season(frame: pd.DataFrame) -> str:
     """Write simulated matches in the data source's own CSV layout."""
     raw = pd.DataFrame(
