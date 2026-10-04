@@ -119,7 +119,7 @@ def test_fixtures_page_before_any_download(empty_client: FlaskClient, settings: 
     assert not database_path(settings).exists()
     assert "No fixtures downloaded yet" in html
     assert "No season schedule downloaded yet" in html
-    assert "Suggested slips are built from value bets" in html
+    assert "Value slips are built from value bets" in html
     assert "valuemodel fixtures" in html
 
 
@@ -348,6 +348,11 @@ def test_fixtures_page_shows_the_season_schedule(
     assert '<option value="1" selected>Next 1 round</option>' in schedule
     assert empty_client.get("/fixtures?rounds=x").status_code == 200
 
+    suggested = html.split('id="suggested"')[1].split("</section>")[0]
+    assert "Likeliest slips for the next round" in suggested
+    assert "Likeliest single" in suggested
+    assert "&#34;odds&#34;: null" in suggested or '"odds": null' in suggested
+
 
 def test_headline_cards_lead_with_closing_line_value(result: BacktestResult) -> None:
     cards = views.headline_cards(result)
@@ -527,3 +532,22 @@ def test_slip_cards_describe_each_leg_for_the_bet_slip() -> None:
     assert double["odds"] == pytest.approx(4.0)
     assert double["returns"] == pytest.approx(4.0 * double["stake"])
     assert views.slip_cards(picks.iloc[0:0], Settings()) == []
+
+
+def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> None:
+    today = date(2026, 10, 4)
+    write_schedule(settings, today)
+    schedule = views.schedule_view(settings, rounds=3, today=today)
+    cards = views.likely_slip_cards(schedule, settings.edge_threshold)
+    # Matchday 10 is next, and Sunderland's game there cannot be priced, so only
+    # Arsenal v Leeds is left for a single.
+    assert [card["name"] for card in cards] == ["Likeliest single"]
+    leg = cards[0]["legs"][0]
+    assert leg["key"] == "2026-10-08 Arsenal v Leeds"
+    assert leg["match"] == "Thu 08 Oct 15:00, Arsenal v Leeds"
+    assert leg["odds"] is None
+    arsenal = schedule.rows["E0"][0]
+    likeliest = max(arsenal.cells, key=lambda cell: cell.chance)
+    assert leg["chance"] == likeliest.chance
+    assert cards[0]["price_to_beat"] == pytest.approx(1.03 / likeliest.chance)
+    assert views.likely_slip_cards(views.ScheduleView(rounds=1), 0.03) == []

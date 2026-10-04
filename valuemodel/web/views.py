@@ -38,7 +38,14 @@ from valuemodel.labels import (
     tone,
 )
 from valuemodel.odds import MARKETS
-from valuemodel.picks import best_slips, match_key, price_to_beat, value_bets
+from valuemodel.picks import (
+    Selection,
+    best_slips,
+    likely_slips,
+    match_key,
+    price_to_beat,
+    value_bets,
+)
 from valuemodel.schedule import (
     SCHEDULE_FILES,
     load_schedule,
@@ -639,3 +646,46 @@ def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dic
                 )
             )
     return games
+
+
+def likely_slip_cards(schedule: ScheduleView, edge_threshold: float) -> list[dict[str, object]]:
+    """The likeliest single, double and treble from each league's next round in the schedule.
+
+    There are no odds yet, so each leg carries the price to beat instead, and the
+    bet slip asks for the bookmaker's odds once the slip is loaded.
+    """
+    selections, labels = [], {}
+    for rows in schedule.rows.values():
+        next_round = rows[0].round if rows else None
+        for row in rows:
+            if row.round != next_round or not row.reliable:
+                continue
+            key = match_key(row.date, row.home_team, row.away_team)
+            labels[key] = match_label(row.date, row.kickoff, row.home_team, row.away_team)
+            selections += [
+                Selection(key, outcome, cell.chance)
+                for outcome, cell in zip(OUTCOME_ORDER, row.cells, strict=True)
+            ]
+    cards = []
+    for slip in likely_slips(selections):
+        legs = [
+            {
+                "key": selection.match,
+                "match": labels[selection.match],
+                "bet": OUTCOME_LABELS[selection.outcome],
+                "odds": None,
+                "chance": selection.probability,
+                "price_to_beat": price_to_beat(selection.probability, edge_threshold),
+            }
+            for selection in slip.selections
+        ]
+        cards.append(
+            {
+                "name": slip.name,
+                "legs": legs,
+                "probability": slip.probability,
+                "fair_odds": slip.fair_odds,
+                "price_to_beat": slip.price_to_beat(edge_threshold),
+            }
+        )
+    return cards

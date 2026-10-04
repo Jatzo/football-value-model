@@ -111,8 +111,14 @@
       show("calc-preview", text);
     }
 
-    function addLeg(leg) {
-      if (!(leg.odds > 1)) {
+    function hasOdds(leg) {
+      return leg.odds > 1;
+    }
+
+    // Legs loaded from a likeliest slip arrive without odds, so only legs added
+    // by hand must already have them.
+    function addLeg(leg, needsOdds) {
+      if (needsOdds && !hasOdds(leg)) {
         show("slip-message", "Enter decimal odds greater than 1 before adding the bet.");
         return;
       }
@@ -126,16 +132,48 @@
       render();
     }
 
+    function edgeText(leg, element) {
+      if (!hasOdds(leg)) {
+        element.textContent = "n/a";
+        element.className = "num";
+        return;
+      }
+      const edge = leg.chance * leg.odds - 1;
+      element.textContent = percent(edge, true);
+      element.className = "num " + (edge >= 0 ? "positive" : "negative");
+    }
+
+    function oddsInput(leg, edgeCell) {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "1.01";
+      input.step = "0.01";
+      input.inputMode = "decimal";
+      input.className = "slip-odds";
+      input.value = hasOdds(leg) ? leg.odds.toFixed(2) : "";
+      input.setAttribute("aria-label", "Odds for " + leg.bet + ", " + leg.match);
+      input.addEventListener("input", function () {
+        leg.odds = parseFloat(input.value);
+        edgeText(leg, edgeCell);
+        summarise();
+      });
+      const wrapper = document.createElement("td");
+      wrapper.className = "num";
+      wrapper.appendChild(input);
+      return wrapper;
+    }
+
     function render() {
       legsBody.replaceChildren();
       legs.forEach(function (leg, index) {
         const row = document.createElement("tr");
-        const edge = leg.chance * leg.odds - 1;
+        const edgeCell = cell("", "num");
+        edgeText(leg, edgeCell);
         row.appendChild(cell(leg.match));
         row.appendChild(cell(leg.bet));
-        row.appendChild(cell(leg.odds.toFixed(2), "num"));
+        row.appendChild(oddsInput(leg, edgeCell));
         row.appendChild(cell(percent(leg.chance, false), "num"));
-        row.appendChild(cell(percent(edge, true), "num " + (edge >= 0 ? "positive" : "negative")));
+        row.appendChild(edgeCell);
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "quiet";
@@ -157,35 +195,44 @@
 
     function summarise() {
       const amount = stakeFrom(stake);
-      const ids = ["calc-combined", "calc-returns", "calc-profit", "calc-chance", "calc-fair",
-        "calc-edge", "calc-expected"];
-      if (legs.length === 0 || amount === null) {
-        ids.forEach(function (id) { show(id, "n/a"); });
-        show("slip-kind", legs.length > 1 ? legs.length + "-leg accumulator" : "Bet");
-        show("calc-verdict", legs.length === 0 ? "" : "Enter a stake to see the returns.");
+      ["calc-combined", "calc-returns", "calc-profit", "calc-chance", "calc-fair", "calc-edge",
+        "calc-expected"].forEach(function (id) { show(id, "n/a"); });
+      show(
+        "slip-kind",
+        legs.length > 1 ? legs.length + "-leg accumulator, odds" : legs.length ? "Single, odds" : "Bet"
+      );
+      if (legs.length === 0) {
+        show("calc-verdict", "");
+        return;
+      }
+      const chance = legs.reduce(function (total, leg) { return total * leg.chance; }, 1);
+      const needed = ((1 + threshold) / chance).toFixed(2);
+      show("calc-chance", percent(chance, false));
+      show("calc-fair", (1 / chance).toFixed(2));
+      if (!legs.every(hasOdds)) {
+        show("calc-verdict", "Enter the odds for every leg to see the returns. The model would want combined odds of at least " +
+          needed + " for a value bet.");
         return;
       }
       const combined = legs.reduce(function (total, leg) { return total * leg.odds; }, 1);
-      const chance = legs.reduce(function (total, leg) { return total * leg.chance; }, 1);
       const edge = chance * combined - 1;
-      show("slip-kind", legs.length === 1 ? "Single, odds" : legs.length + "-leg accumulator, odds");
       show("calc-combined", combined.toFixed(2));
+      show("calc-edge", percent(edge, true));
+      if (amount === null) {
+        show("calc-verdict", "Enter a stake to see the returns.");
+        return;
+      }
       show("calc-returns", money(amount * combined));
       show("calc-profit", money(amount * (combined - 1)));
-      show("calc-chance", percent(chance, false));
-      show("calc-fair", (1 / chance).toFixed(2));
-      show("calc-edge", percent(edge, true));
       show("calc-expected", (edge >= 0 ? "+" : "") + money(amount * edge));
       show(
         "calc-verdict",
         edge >= threshold
           ? "A value bet by the model's rule: the odds beat its fair odds by at least " +
               percent(threshold, false) + "."
-          : "Not a value bet by the model's rule: it would want odds of at least " +
-              ((1 + threshold) / chance).toFixed(2) + "."
+          : "Not a value bet by the model's rule: it would want odds of at least " + needed + "."
       );
     }
-
     match.addEventListener("change", fillOutcomes);
     outcome.addEventListener("change", fillOdds);
     odds.addEventListener("input", preview);
@@ -199,7 +246,7 @@
         bet: chosen.name,
         odds: parseFloat(odds.value),
         chance: chosen.chance
-      });
+      }, true);
     });
     document.getElementById("slip-clear").addEventListener("click", function () {
       legs.length = 0;
@@ -214,7 +261,7 @@
           bet: button.dataset.bet,
           odds: parseFloat(button.dataset.odds),
           chance: parseFloat(button.dataset.chance)
-        });
+        }, true);
         panel.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
@@ -223,7 +270,7 @@
         legs.length = 0;
         show("slip-message", "");
         JSON.parse(button.dataset.legs).forEach(function (leg) {
-          addLeg({ key: leg.key, match: leg.match, bet: leg.bet, odds: leg.odds, chance: leg.chance });
+          addLeg({ key: leg.key, match: leg.match, bet: leg.bet, odds: leg.odds, chance: leg.chance }, false);
         });
         render();
         panel.scrollIntoView({ behavior: "smooth", block: "start" });

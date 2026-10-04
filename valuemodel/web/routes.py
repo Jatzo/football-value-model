@@ -133,6 +133,7 @@ def fixtures() -> str:
         view=view,
         schedule=schedule,
         calculator=views.calculator_games(view, schedule),
+        likely=views.likely_slip_cards(schedule, settings.edge_threshold),
         staking=staking_description(settings),
         round_choices=views.ROUND_CHOICES,
         settings=settings,

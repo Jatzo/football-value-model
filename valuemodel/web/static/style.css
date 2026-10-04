@@ -165,6 +165,8 @@ button.quiet { background: transparent; border-color: var(--border); color: var(
 .slip-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 .slip-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .slip-card h3 { margin: 0; font-size: 16px; }
+.subheading { margin: 22px 0 6px; font-size: 16px; }
+.slip-odds { width: 6em; text-align: right; }
 .slip-card ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 6px; }
 .slip-card dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
 .slip-card dl div { display: contents; }

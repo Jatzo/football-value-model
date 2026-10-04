@@ -168,7 +168,32 @@
   {% elif view.status == "ok" %}
   <p class="muted">None of the listed games has a value bet at {{ bookmaker }}'s current odds, so there is nothing to build a slip from yet.</p>
   {% else %}
-  <p class="muted">Suggested slips are built from value bets, which need {{ bookmaker }}'s odds. They appear here once the fixtures file lists Premier League or Championship games, usually a few days before each round. Until then, use the bet slip below with odds from the {{ bookmaker }} site, and the prices to beat in the season schedule.</p>
+  <p class="muted">Value slips are built from value bets, which need {{ bookmaker }}'s odds. They appear here once the fixtures file lists Premier League or Championship games, usually a few days before each round. Until then, the likeliest slips below need only the model.</p>
+  {% endif %}
+  {% if likely %}
+  <h3 class="subheading">Likeliest slips for the next round</h3>
+  <p class="muted small">
+    The single, double and treble the model thinks most likely to win, from the next round of each league, one leg per match. They need no odds, so they say nothing about value:
+    each shows the lowest {{ bookmaker }} odds that would make it a value bet. Load one into the bet slip and type {{ bookmaker }}'s odds for each leg to see the returns.
+  </p>
+  <div class="slip-cards">
+    {% for slip in likely %}
+    <article class="slip-card">
+      <h3>{{ slip.name }}</h3>
+      <ul>
+        {% for leg in slip.legs %}
+        <li>{{ leg.match }}<br><span class="muted">{{ leg.bet }}, {{ leg.chance | percent }}, value from {{ leg.price_to_beat | odds }}</span></li>
+        {% endfor %}
+      </ul>
+      <dl>
+        <div><dt>Model chance</dt><dd>{{ slip.probability | percent }}</dd></div>
+        <div><dt>Fair odds</dt><dd>{{ slip.fair_odds | odds }}</dd></div>
+        <div><dt>Value from</dt><dd>{{ slip.price_to_beat | odds }}</dd></div>
+      </dl>
+      <button type="button" class="quiet load-slip" data-legs='{{ slip.legs | tojson }}'>Load into bet slip</button>
+    </article>
+    {% endfor %}
+  </div>
   {% endif %}
 </section>
 
