@@ -4,6 +4,7 @@ import os
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -111,6 +112,13 @@ def load_settings() -> Settings:
 def season_code(start_year: int) -> str:
     """Return the data source's code for a season, for example 2024 gives "2425"."""
     return f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+
+
+def current_season(today: date | None = None) -> str:
+    """Code of the season in progress. A new season is taken to start on 1 July."""
+    today = today or date.today()
+    start_year = today.year if today.month >= 7 else today.year - 1
+    return season_code(start_year)
 
 
 def season_label(code: str) -> str:

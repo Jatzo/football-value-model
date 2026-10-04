@@ -1,9 +1,11 @@
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from valuemodel.config import (
     Settings,
+    current_season,
     load_settings,
     season_code,
     season_label,
@@ -92,3 +94,11 @@ def test_bad_settings_are_rejected(
 )
 def test_season_label(code: str, label: str) -> None:
     assert season_label(code) == label
+
+
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [(date(2026, 6, 30), "2526"), (date(2026, 7, 1), "2627"), (date(2026, 10, 4), "2627")],
+)
+def test_current_season(today: date, expected: str) -> None:
+    assert current_season(today) == expected
