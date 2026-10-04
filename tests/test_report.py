@@ -3,7 +3,7 @@ from simulation import simulated_seasons
 
 from valuemodel.backtest import BacktestResult, run_backtest
 from valuemodel.config import Settings
-from valuemodel.labels import percent, tone, units
+from valuemodel.labels import percent, share, tone, units
 from valuemodel.report import format_report, staking_description, table
 
 
@@ -72,3 +72,16 @@ def test_report_for_a_run_without_bets() -> None:
     report = format_report(empty)
     assert "Follow the market" in report
     assert "n/a" in report
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(0.03, "3%"), (0.035, "3.5%"), (0.02, "2%"), (0.025, "2.5%"), (0.07, "7%")],
+)
+def test_share_keeps_meaningful_decimals(value: float, expected: str) -> None:
+    assert share(value) == expected
+
+
+def test_report_shows_a_fractional_threshold(result: BacktestResult) -> None:
+    fractional = BacktestResult(**{**result.__dict__, "settings": Settings(edge_threshold=0.035)})
+    assert "Edge threshold 3.5%" in format_report(fractional)

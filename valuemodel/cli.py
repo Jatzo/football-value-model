@@ -37,7 +37,7 @@ from valuemodel.data import (
     make_client,
 )
 from valuemodel.fixtures import download_fixtures, load_fixtures
-from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS
+from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, share
 from valuemodel.markets import predict
 from valuemodel.models.common import UnknownTeamError
 from valuemodel.odds import MARKETS, check_quotes
@@ -247,7 +247,7 @@ def _print_prices(
         print(f"Bookmaker margin, {MARKET_LABELS[market].lower()}: {margin:.1%}")
     bets = [check for check in checks if check.value]
     if not bets:
-        print(f"No outcome reaches the {settings.edge_threshold:.0%} edge threshold")
+        print(f"No outcome reaches the {share(settings.edge_threshold)} edge threshold")
     for bet in bets:
         amount = stake(bet.probability, bet.odds, settings.starting_bankroll, settings)
         print(

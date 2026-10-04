@@ -16,6 +16,7 @@ from valuemodel.labels import (
     decimal_odds,
     label,
     percent,
+    share,
     tone,
     units,
 )
@@ -31,6 +32,7 @@ def register_filters(app: Flask) -> None:
         percent=percent,
         signed=lambda value: percent(value, signed=True),
         units=units,
+        share=share,
         odds=decimal_odds,
         tone=tone,
         season=season_label,
@@ -76,8 +78,8 @@ def _render_run_page(template: str, **context: object) -> str:
     settings = result.settings
     description = (
         f"Bets at {BOOKMAKERS[settings.bookmaker]} pre-match odds, "
-        f"{staking_description(settings)} capped at {settings.max_stake:.0%}, "
-        f"edge threshold {settings.edge_threshold:.0%}"
+        f"{staking_description(settings)} capped at {share(settings.max_stake)}, "
+        f"edge threshold {share(settings.edge_threshold)}"
     )
     return render_template(
         template,

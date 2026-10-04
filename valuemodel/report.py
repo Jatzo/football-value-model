@@ -12,6 +12,7 @@ from valuemodel.labels import (
     STRATEGY_LABELS,
     label,
     percent,
+    share,
     units,
 )
 
@@ -33,7 +34,7 @@ def table(headers: Sequence[str], rows: Sequence[Sequence[Cell]]) -> str:
 
 def staking_description(settings: Settings) -> str:
     if settings.staking == "flat":
-        return f"flat stakes of {settings.flat_stake_share:.0%} of the starting bankroll"
+        return f"flat stakes of {share(settings.flat_stake_share)} of the starting bankroll"
     fraction = "quarter" if settings.kelly_fraction == 0.25 else f"{settings.kelly_fraction:g}"
     return f"{fraction} Kelly"
 
@@ -41,11 +42,12 @@ def staking_description(settings: Settings) -> str:
 def _header(result: BacktestResult) -> str:
     settings = result.settings
     seasons = ", ".join(season_label(season) for season in result.seasons)
+    cap, threshold = share(settings.max_stake), share(settings.edge_threshold)
     return (
         f"Backtest of {result.league}, seasons {seasons}\n"
         f"Bets taken at {BOOKMAKERS[settings.bookmaker]} pre-match odds with "
-        f"{staking_description(settings)}, capped at {settings.max_stake:.0%} of the bankroll.\n"
-        f"Edge threshold {settings.edge_threshold:.0%}, {settings.margin_method} margin removal, "
+        f"{staking_description(settings)}, capped at {cap} of the bankroll.\n"
+        f"Edge threshold {threshold}, {settings.margin_method} margin removal, "
         f"xi {result.xi}, starting bankroll {settings.starting_bankroll:g} units."
     )
 

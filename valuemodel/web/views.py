@@ -21,6 +21,7 @@ from valuemodel.labels import (
     is_missing,
     label,
     percent,
+    share,
     tone,
 )
 
@@ -43,11 +44,12 @@ def headline_cards(result: BacktestResult) -> list[Card]:
     row = result.summary.set_index("strategy").loc[MAIN_MODEL]
     start = result.settings.starting_bankroll
     if not row["bets"]:
+        threshold = share(result.settings.edge_threshold)
         return [
             Card(
                 "Bets placed",
                 "0",
-                note=f"no outcome reached the {result.settings.edge_threshold:.0%} edge threshold",
+                note=f"no outcome reached the {threshold} edge threshold",
             )
         ]
     return [

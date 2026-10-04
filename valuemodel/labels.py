@@ -48,6 +48,14 @@ def percent(value: float | None, signed: bool = False) -> str:
     return f"{value:+.1%}" if signed else f"{value:.1%}"
 
 
+def share(value: float) -> str:
+    """A setting such as a threshold or cap as a percentage, without rounding it away.
+
+    0.03 gives "3%" and 0.035 gives "3.5%", where a fixed format would show 4%.
+    """
+    return f"{round(value * 100, 6):g}%"
+
+
 def units(value: float | None) -> str:
     return "n/a" if is_missing(value) else f"{value:,.2f}"
 
