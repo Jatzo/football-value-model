@@ -2,6 +2,7 @@
 
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,6 +39,13 @@ TRAINING_WINDOW_DAYS = 1095
 # estimates, so their games are flagged and not bet on.
 MIN_TEAM_MATCHES = 10
 
+MARGIN_METHODS: tuple[str, ...] = ("power", "proportional")
+STAKING_METHODS: tuple[str, ...] = ("kelly", "flat")
+
+# Bookmakers whose pre-match prices a paper bet can be taken at. Market maximum
+# odds are left out because nobody can reliably get the best price everywhere.
+BOOKMAKERS: dict[str, str] = {"b365": "Bet365", "pinnacle": "Pinnacle"}
+
 USER_AGENT = "football-value-model (+https://github.com/Jatzo/footballbetfinder)"
 
 _SEASON_PATTERN = re.compile(r"^\d{4}$")
@@ -45,12 +53,42 @@ _SEASON_PATTERN = re.compile(r"^\d{4}$")
 
 @dataclass(frozen=True)
 class Settings:
-    data_dir: Path
-    request_delay: float
+    data_dir: Path = Path("data")
+    request_delay: float = 2.0
+    margin_method: str = "power"
+    edge_threshold: float = 0.03
+    staking: str = "kelly"
+    kelly_fraction: float = 0.25
+    max_stake: float = 0.02
+    flat_stake: float = 0.01
+    starting_bankroll: float = 1000.0
+    bookmaker: str = "b365"
 
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
+
+
+def _number(name: str, default: float, low: float, high: float) -> float:
+    """Read a number from the environment and check it lies in [low, high]."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {raw!r}") from None
+    if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, got {value}")
+    return value
+
+
+def _choice(name: str, default: str, options: Iterable[str]) -> str:
+    value = os.environ.get(name, default)
+    options = tuple(options)
+    if value not in options:
+        raise ValueError(f"{name} must be one of {', '.join(options)}, got {value!r}")
+    return value
 
 
 def load_settings() -> Settings:
@@ -58,7 +96,15 @@ def load_settings() -> Settings:
     load_dotenv()
     return Settings(
         data_dir=Path(os.environ.get("VALUEMODEL_DATA_DIR", "data")),
-        request_delay=float(os.environ.get("VALUEMODEL_REQUEST_DELAY", "2")),
+        request_delay=_number("VALUEMODEL_REQUEST_DELAY", 2.0, 0.0, 60.0),
+        margin_method=_choice("VALUEMODEL_MARGIN_METHOD", "power", MARGIN_METHODS),
+        edge_threshold=_number("VALUEMODEL_EDGE_THRESHOLD", 0.03, 0.0, 1.0),
+        staking=_choice("VALUEMODEL_STAKING", "kelly", STAKING_METHODS),
+        kelly_fraction=_number("VALUEMODEL_KELLY_FRACTION", 0.25, 0.0, 1.0),
+        max_stake=_number("VALUEMODEL_MAX_STAKE", 0.02, 0.0, 1.0),
+        flat_stake=_number("VALUEMODEL_FLAT_STAKE", 0.01, 0.0, 1.0),
+        starting_bankroll=_number("VALUEMODEL_STARTING_BANKROLL", 1000.0, 1.0, 1e12),
+        bookmaker=_choice("VALUEMODEL_BOOKMAKER", "b365", BOOKMAKERS),
     )
 
 
