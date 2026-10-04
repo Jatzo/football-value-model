@@ -49,7 +49,7 @@ def test_flat_stake_is_constant_until_the_cap_bites() -> None:
 
 def test_stake_uses_the_configured_method() -> None:
     kelly = Settings(staking="kelly")
-    flat = Settings(staking="flat", flat_stake=0.01, starting_bankroll=1000)
+    flat = Settings(staking="flat", flat_stake_share=0.01, starting_bankroll=1000)
     assert stake(0.4, 2.7, 1000, kelly) == pytest.approx(11.76, abs=0.01)
     assert stake(0.4, 2.7, 1000, flat) == pytest.approx(10.0)
 

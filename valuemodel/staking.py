@@ -40,6 +40,6 @@ def stake(probability: float, odds: float, bankroll: float, settings: Settings) 
     if probability * odds - 1.0 <= 0:
         return 0.0
     if settings.staking == "flat":
-        unit = settings.flat_stake * settings.starting_bankroll
+        unit = settings.flat_stake_share * settings.starting_bankroll
         return flat_stake(bankroll, unit, settings.max_stake)
     return kelly_stake(probability, odds, bankroll, settings.kelly_fraction, settings.max_stake)

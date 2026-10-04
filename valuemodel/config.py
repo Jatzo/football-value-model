@@ -63,7 +63,7 @@ class Settings:
     staking: str = "kelly"
     kelly_fraction: float = 0.25
     max_stake: float = 0.02
-    flat_stake: float = 0.01
+    flat_stake_share: float = 0.01
     starting_bankroll: float = 1000.0
     bookmaker: str = "b365"
 
@@ -105,7 +105,7 @@ def load_settings() -> Settings:
         staking=_choice("VALUEMODEL_STAKING", "kelly", STAKING_METHODS),
         kelly_fraction=_number("VALUEMODEL_KELLY_FRACTION", 0.25, 0.0, 1.0),
         max_stake=_number("VALUEMODEL_MAX_STAKE", 0.02, 0.0, 1.0),
-        flat_stake=_number("VALUEMODEL_FLAT_STAKE", 0.01, 0.0, 1.0),
+        flat_stake_share=_number("VALUEMODEL_FLAT_STAKE", 0.01, 0.0, 1.0),
         starting_bankroll=_number("VALUEMODEL_STARTING_BANKROLL", 1000.0, 1.0, 1e12),
         bookmaker=_choice("VALUEMODEL_BOOKMAKER", "b365", BOOKMAKERS),
     )

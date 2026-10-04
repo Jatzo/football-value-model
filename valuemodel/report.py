@@ -26,7 +26,7 @@ def table(headers: Sequence[str], rows: Sequence[Sequence[Cell]]) -> str:
 
 def staking_description(settings: Settings) -> str:
     if settings.staking == "flat":
-        return f"flat stakes of {settings.flat_stake:.0%} of the starting bankroll"
+        return f"flat stakes of {settings.flat_stake_share:.0%} of the starting bankroll"
     fraction = "quarter" if settings.kelly_fraction == 0.25 else f"{settings.kelly_fraction:g}"
     return f"{fraction} Kelly"
 

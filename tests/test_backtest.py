@@ -295,7 +295,7 @@ def test_pinnacle_as_bookmaker_is_scored_and_skips_the_market_strategy(
 
 
 def test_flat_stakes_end_to_end(simulated_league: pd.DataFrame) -> None:
-    settings = Settings(staking="flat", flat_stake=0.01, starting_bankroll=1000)
+    settings = Settings(staking="flat", flat_stake_share=0.01, starting_bankroll=1000)
     bets = run_backtest(simulated_league, "E0", ["2324"], settings, min_matches=0).bets
     stakes = bets["dixon-coles"]["stake"]
     assert len(stakes) > 0
