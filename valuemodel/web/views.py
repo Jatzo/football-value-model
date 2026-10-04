@@ -9,8 +9,14 @@ from datetime import datetime
 
 import pandas as pd
 
-from valuemodel.backtest import MAIN_MODEL, MODELS, BacktestResult, probability_bands
-from valuemodel.config import DEFAULT_SEASONS, DEFAULT_XI, LEAGUES, Settings, current_season
+from valuemodel.backtest import (
+    MAIN_MODEL,
+    MODELS,
+    BacktestResult,
+    main_strategy,
+    probability_bands,
+)
+from valuemodel.config import DEFAULT_SEASONS, LEAGUES, MODEL_XI, Settings, current_season
 from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
 from valuemodel.labels import (
@@ -40,7 +46,7 @@ class Card:
 
 def headline_cards(result: BacktestResult) -> list[Card]:
     """The main model's most important figures, closing line value first."""
-    row = result.summary.set_index("strategy").loc[MAIN_MODEL]
+    row = result.summary.set_index("strategy").loc[main_strategy(result)]
     start = result.settings.starting_bankroll
     if not row["bets"]:
         threshold = share(result.settings.edge_threshold)
@@ -93,7 +99,7 @@ def headline_cards(result: BacktestResult) -> list[Card]:
 
 def clv_explanation(result: BacktestResult) -> str:
     """Explain closing line value in terms of what this run actually shows."""
-    mean_clv = result.summary.set_index("strategy").loc[MAIN_MODEL, "mean_clv"]
+    mean_clv = result.summary.set_index("strategy").loc[main_strategy(result), "mean_clv"]
     intro = (
         "Closing line value compares each price taken with Pinnacle's closing price after its "
         "margin is removed. It is the most reliable sign of a real edge, because it is far less "
@@ -174,7 +180,7 @@ def scores_verdict(scores: pd.DataFrame) -> str:
 
 @dataclass
 class BetFilters:
-    strategy: str = "dixon-coles"
+    strategy: str = ""
     league: str = ""
     season: str = ""
     market: str = ""
@@ -189,7 +195,7 @@ class BetFilters:
         except ValueError:
             page = 1
         return cls(
-            strategy=args.get("strategy", "dixon-coles"),
+            strategy=args.get("strategy", ""),
             league=args.get("league", ""),
             season=args.get("season", ""),
             market=args.get("market", ""),
@@ -221,6 +227,8 @@ def filter_bets(bets: pd.DataFrame, filters: BetFilters) -> pd.DataFrame:
 
 def bet_page(result: BacktestResult, filters: BetFilters) -> BetPage:
     """One page of the bet log for the chosen filters, newest bets first."""
+    if filters.strategy not in result.bets:
+        filters.strategy = main_strategy(result)
     bets = result.bets.get(filters.strategy, pd.DataFrame())
     chosen = filter_bets(bets, filters) if len(bets) else bets
     staked = float(chosen["stake"].sum()) if len(chosen) else 0.0
@@ -377,7 +385,7 @@ def fixtures_view(settings: Settings) -> FixturesView:
             fetched=fetched_at(path),
             unpriced_leagues=dict.fromkeys(fixtures["league"], "no cached results"),
         )
-    priced = price_fixtures(history, fixtures, settings, DEFAULT_XI)
+    priced = price_fixtures(history, fixtures, settings, MODEL_XI[MAIN_MODEL])
     latest = {
         league: str(group["date"].max().date()) for league, group in history.groupby("league")
     }

@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 import pandas as pd
 
+from valuemodel.backtest import MAIN_MODEL, MODELS
 from valuemodel.config import MIN_TEAM_MATCHES, Settings, current_season
 from valuemodel.data import (
     MATCH_COLUMNS,
@@ -23,7 +24,6 @@ from valuemodel.data import (
     standardise,
 )
 from valuemodel.markets import OUTCOMES, price_matches
-from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.odds import MARKETS, find_value
 
 FIXTURES_URL = "https://football-data.co.uk/fixtures.csv"
@@ -83,7 +83,7 @@ def price_fixtures(
         upcoming = fixtures[fixtures["league"] == league]
         history = matches[matches["league"] == league]
         try:
-            model = fit_dixon_coles(history, upcoming["date"].min(), xi)
+            model = MODELS[MAIN_MODEL](history, upcoming["date"].min(), xi)
         except (ValueError, RuntimeError) as error:
             unpriced[league] = str(error)
             continue

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from valuemodel.backtest import MAIN_MODEL, MODELS, BacktestResult, probability_bands
+from valuemodel.backtest import MODELS, BacktestResult, main_strategy, probability_bands
 from valuemodel.config import BOOKMAKERS, Settings, season_label
 from valuemodel.labels import (
     FORECASTER_LABELS,
@@ -48,7 +48,7 @@ def _header(result: BacktestResult) -> str:
         f"Bets taken at {BOOKMAKERS[settings.bookmaker]} pre-match odds with "
         f"{staking_description(settings)}, capped at {cap} of the bankroll.\n"
         f"Edge threshold {threshold}, {settings.margin_method} margin removal, "
-        f"xi {result.xi}, starting bankroll {settings.starting_bankroll:g} units."
+        f"main model xi {result.xi}, starting bankroll {settings.starting_bankroll:g} units."
     )
 
 
@@ -195,6 +195,7 @@ def format_report(result: BacktestResult) -> str:
         _season_section(result.season_summary),
         _scores_section(result.scores),
     ]
-    if MAIN_MODEL in result.calibration:
-        sections.append(_calibration_section(MAIN_MODEL, result.calibration[MAIN_MODEL]))
+    main = main_strategy(result)
+    if main in result.calibration:
+        sections.append(_calibration_section(main, result.calibration[main]))
     return "\n\n".join(sections)

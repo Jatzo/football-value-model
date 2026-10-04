@@ -15,8 +15,8 @@ import pandas as pd
 
 from valuemodel.config import (
     BOOKMAKERS,
-    DEFAULT_XI,
     MIN_TEAM_MATCHES,
+    MODEL_XI,
     Settings,
 )
 from valuemodel.data import odds_columns
@@ -33,9 +33,9 @@ from valuemodel.walkforward import (
 )
 
 MODELS: dict[str, FitFunction] = {
+    "shots-adjusted": fit_shots_adjusted,
     "dixon-coles": fit_dixon_coles,
     "poisson": fit_poisson,
-    "shots-adjusted": fit_shots_adjusted,
 }
 
 # Treating Pinnacle's margin-free pre-match prices as the forecast gives the
@@ -43,8 +43,9 @@ MODELS: dict[str, FitFunction] = {
 # generous than the sharpest price available at the same time.
 MARKET_STRATEGY = "market"
 
-# The model the report and dashboard lead with. Poisson is the baseline.
-MAIN_MODEL = "dixon-coles"
+# The model the report, dashboard and fixtures lead with. It forecast best on
+# the tuning seasons. Dixon-Coles and the Poisson baseline are kept for comparison.
+MAIN_MODEL = "shots-adjusted"
 
 CALIBRATION_BINS = 10
 
@@ -350,22 +351,35 @@ def _season_rows(
     return rows
 
 
+def main_strategy(result: "BacktestResult") -> str:
+    """The main model, or the first strategy for runs saved before it existed."""
+    if MAIN_MODEL in result.bets or result.bets == {}:
+        return MAIN_MODEL
+    return next(iter(result.bets))
+
+
 def run_backtest(
     matches: pd.DataFrame,
     league: str,
     seasons: Iterable[str],
     settings: Settings,
-    xi: float = DEFAULT_XI,
+    xi: float | None = None,
     min_matches: int = MIN_TEAM_MATCHES,
 ) -> BacktestResult:
-    """Forecast, bet and score every match of the given seasons in one league."""
+    """Forecast, bet and score every match of the given seasons in one league.
+
+    Each model uses its own tuned time decay unless xi is given for all of them.
+    """
     seasons = tuple(seasons)
     history = matches[matches["league"] == league]
     targets = history[history["season"].isin(seasons)]
-    result = BacktestResult(league=league, seasons=seasons, xi=xi, settings=settings)
+    model_xi = {name: MODEL_XI[name] if xi is None else xi for name in MODELS}
+    result = BacktestResult(
+        league=league, seasons=seasons, xi=model_xi[MAIN_MODEL], settings=settings
+    )
 
     forecasts = {
-        name: walk_forward_forecasts(history, seasons, fit, xi, min_matches)
+        name: walk_forward_forecasts(history, seasons, fit, model_xi[name], min_matches)
         for name, fit in MODELS.items()
     }
     # Following the market means betting where the bookmaker beats Pinnacle, which

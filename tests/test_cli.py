@@ -85,7 +85,7 @@ def test_predict_prints_fair_odds(
 ) -> None:
     assert cli.main(["predict", "--home", "Team 00", "--away", " Team 01 "]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("Team 00 v Team 01\nDixon-Coles, fitted on E0")
+    assert out.startswith("Team 00 v Team 01\nShots-adjusted, fitted on E0")
     for label in ("Home win", "Draw", "Away win", "Over 2.5", "Under 2.5"):
         assert label in out
 

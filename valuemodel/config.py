@@ -28,16 +28,23 @@ TUNING_SEASONS: tuple[str, ...] = ("2122", "2223")
 BACKTEST_SEASONS: tuple[str, ...] = ("2324", "2425", "2526")
 DEFAULT_SEASONS: tuple[str, ...] = HISTORY_SEASONS + TUNING_SEASONS + BACKTEST_SEASONS
 
-# Time decay per day. Chosen with `valuemodel tune-xi` on walk-forward forecasts
-# for E0 2021/22 and 2022/23, refitted on the backtest's schedule, where 0.003
-# gave the lowest ranked probability score and log loss for both models. The
-# README records the full table.
+# Time decay per day for the models fitted to goals. Chosen with `valuemodel
+# tune-xi` on walk-forward forecasts for E0 2021/22 and 2022/23, refitted on the
+# backtest's schedule, where 0.003 gave the lowest ranked probability score and
+# log loss for Dixon-Coles and Poisson. The README records the full tables.
 DEFAULT_XI = 0.003
 
-# Share of each score taken from shot-based expected goals in the shots-adjusted
-# model, the rest from actual goals. Chosen with `valuemodel tune-shots` on the
-# same tuning seasons as xi. The README records the full table.
-SHOT_WEIGHT = 0.5
+# The shots-adjusted model's time decay and the share of each score it takes
+# from shot-based expected goals, chosen together on the same tuning seasons.
+# Shots are less noisy than goals, so recent matches can safely count for more.
+SHOTS_XI = 0.006
+SHOT_WEIGHT = 0.6
+
+MODEL_XI: dict[str, float] = {
+    "shots-adjusted": SHOTS_XI,
+    "dixon-coles": DEFAULT_XI,
+    "poisson": DEFAULT_XI,
+}
 
 # Matches older than this are left out of a fit. Time decay already gives them
 # little weight, and dropping them keeps each refit fast.

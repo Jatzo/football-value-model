@@ -57,7 +57,7 @@ def test_report_puts_closing_line_value_first(result: BacktestResult) -> None:
         "Betting results",
         "By season",
         "Model quality",
-        "Calibration of Dixon-Coles",
+        "Calibration of Shots-adjusted",
     ]
     positions = [report.index(heading) for heading in headings]
     assert positions == sorted(positions)

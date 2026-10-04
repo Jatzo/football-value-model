@@ -4,7 +4,7 @@
 <section class="page-heading">
   <h1>Upcoming fixtures</h1>
   <p class="muted">
-    Dixon-Coles fair odds against {{ bookmaker }}'s prices. Value means an edge of at least {{ settings.edge_threshold | share }}.
+    {{ model_name }} fair odds against {{ bookmaker }}'s prices. Value means an edge of at least {{ settings.edge_threshold | share }}.
     {% if view.fetched %}Fixtures fetched {{ view.fetched.strftime('%d %b %Y at %H:%M') }} UTC.{% endif %}
   </p>
 </section>

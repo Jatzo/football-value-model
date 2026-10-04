@@ -7,10 +7,12 @@ from simulation import simulated_seasons
 
 from valuemodel.backtest import (
     BET_COLUMNS,
+    BacktestResult,
     betting_summary,
     calibration_table,
     closing_line_value,
     longest_losing_run,
+    main_strategy,
     market_forecasts,
     max_drawdown,
     model_scores,
@@ -250,15 +252,15 @@ def simulated_league() -> pd.DataFrame:
 def test_run_backtest_end_to_end(simulated_league: pd.DataFrame) -> None:
     result = run_backtest(simulated_league, "E0", ["2324"], Settings(), min_matches=0)
     assert list(result.summary["strategy"]) == [
+        "shots-adjusted",
         "dixon-coles",
         "poisson",
-        "shots-adjusted",
         "market",
     ]
     assert list(result.scores["forecaster"]) == [
+        "shots-adjusted",
         "dixon-coles",
         "poisson",
-        "shots-adjusted",
         "bet365 pre-match",
         "pinnacle closing",
     ]
@@ -291,7 +293,7 @@ def test_pinnacle_as_bookmaker_is_scored_and_skips_the_market_strategy(
 ) -> None:
     settings = Settings(bookmaker="pinnacle")
     result = run_backtest(simulated_league, "E0", ["2324"], settings, min_matches=0)
-    assert list(result.summary["strategy"]) == ["dixon-coles", "poisson", "shots-adjusted"]
+    assert list(result.summary["strategy"]) == ["shots-adjusted", "dixon-coles", "poisson"]
     assert "pinnacle pre-match" in list(result.scores["forecaster"])
 
 
@@ -324,3 +326,15 @@ def test_probability_bands_match_hand_calculation() -> None:
 
 def test_probability_bands_without_bets() -> None:
     assert probability_bands(pd.DataFrame(columns=["probability", "won", "odds"])).empty
+
+
+def test_main_strategy_falls_back_for_older_runs(simulated_league: pd.DataFrame) -> None:
+    result = run_backtest(simulated_league, "E0", ["2324"], Settings(), min_matches=0)
+    assert main_strategy(result) == "shots-adjusted"
+    older = BacktestResult(
+        **{
+            **result.__dict__,
+            "bets": {name: bets for name, bets in result.bets.items() if name != "shots-adjusted"},
+        }
+    )
+    assert main_strategy(older) == "dixon-coles"

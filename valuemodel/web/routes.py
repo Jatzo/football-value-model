@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 
-from valuemodel.backtest import BacktestResult
+from valuemodel.backtest import MAIN_MODEL, BacktestResult
 from valuemodel.config import BOOKMAKERS, LEAGUES, MIN_TEAM_MATCHES, Settings, season_label
 from valuemodel.labels import (
     FORECASTER_LABELS,
@@ -130,5 +130,6 @@ def fixtures() -> str:
         settings=settings,
         bookmaker=BOOKMAKERS[settings.bookmaker],
         min_matches=MIN_TEAM_MATCHES,
+        model_name=label(STRATEGY_LABELS, MAIN_MODEL),
         run_id=request.args.get("run", type=int),
     )

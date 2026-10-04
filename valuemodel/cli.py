@@ -10,14 +10,14 @@ from difflib import get_close_matches
 
 import pandas as pd
 
-from valuemodel.backtest import MODELS, run_backtest
+from valuemodel.backtest import MAIN_MODEL, MODELS, run_backtest
 from valuemodel.config import (
     BACKTEST_SEASONS,
     DEFAULT_LEAGUES,
     DEFAULT_SEASONS,
-    DEFAULT_XI,
     HISTORY_SEASONS,
     MIN_TEAM_MATCHES,
+    MODEL_XI,
     TUNING_SEASONS,
     Settings,
     current_season,
@@ -93,7 +93,7 @@ def _add_model_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--model",
         choices=list(MODELS),
-        default="dixon-coles",
+        default=MAIN_MODEL,
         help="model to fit (default: %(default)s)",
     )
 
@@ -177,7 +177,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="fit on matches before this date (default: the day after the last cached match)",
     )
     forecast.add_argument(
-        "--xi", type=float, default=DEFAULT_XI, help="decay rate per day (default: %(default)s)"
+        "--xi",
+        type=float,
+        help="decay rate per day (default: the tuned value for the chosen model)",
     )
     forecast.add_argument(
         "--odds",
@@ -275,7 +277,7 @@ def run_predict(
     home: str,
     away: str,
     as_of: pd.Timestamp | None,
-    xi: float,
+    xi: float | None,
     quoted: dict[str, float],
 ) -> int:
     settings = load_settings()
@@ -284,6 +286,8 @@ def run_predict(
         raise FileNotFoundError(f"No cached data for {league}. Run: valuemodel download")
     if as_of is None:
         as_of = matches["date"].max() + pd.Timedelta(days=1)
+    if xi is None:
+        xi = MODEL_XI[model]
     home, away = normalise_team(home), normalise_team(away)
     fitted = MODELS[model](matches, as_of, xi)
     try:

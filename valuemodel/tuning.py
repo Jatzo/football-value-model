@@ -9,8 +9,7 @@ from functools import partial
 
 import pandas as pd
 
-from valuemodel.config import DEFAULT_XI, MIN_TEAM_MATCHES
-from valuemodel.models.dixon_coles import fit_dixon_coles
+from valuemodel.config import MIN_TEAM_MATCHES, SHOTS_XI
 from valuemodel.models.shots_adjusted import fit_shots_adjusted
 from valuemodel.scoring import (
     brier_score,
@@ -20,7 +19,18 @@ from valuemodel.scoring import (
 )
 from valuemodel.walkforward import FitFunction, walk_forward_forecasts
 
-XI_GRID: tuple[float, ...] = (0.0, 0.0005, 0.001, 0.0015, 0.002, 0.0025, 0.003, 0.004, 0.005)
+XI_GRID: tuple[float, ...] = (
+    0.0,
+    0.001,
+    0.002,
+    0.003,
+    0.004,
+    0.005,
+    0.006,
+    0.007,
+    0.008,
+    0.01,
+)
 SHOT_WEIGHT_GRID: tuple[float, ...] = (0.0, 0.25, 0.4, 0.5, 0.6, 0.75, 1.0)
 
 
@@ -40,7 +50,7 @@ def evaluate_xi(
     matches: pd.DataFrame,
     seasons: Iterable[str],
     xi_values: Iterable[float] = XI_GRID,
-    fit: FitFunction = fit_dixon_coles,
+    fit: FitFunction = fit_shots_adjusted,
     min_matches: int = MIN_TEAM_MATCHES,
 ) -> pd.DataFrame:
     """Score walk-forward forecasts for each candidate xi."""
@@ -56,7 +66,7 @@ def evaluate_shot_weights(
     matches: pd.DataFrame,
     seasons: Iterable[str],
     weights: Iterable[float] = SHOT_WEIGHT_GRID,
-    xi: float = DEFAULT_XI,
+    xi: float = SHOTS_XI,
     min_matches: int = MIN_TEAM_MATCHES,
 ) -> pd.DataFrame:
     """Score the shots-adjusted model for each share of expected goals in the blend.

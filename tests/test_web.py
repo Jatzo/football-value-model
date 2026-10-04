@@ -63,7 +63,7 @@ def test_summary_page(client: FlaskClient) -> None:
     assert "Bets at Bet365 pre-match odds, quarter Kelly capped at 2%" in html
     assert "BeGambleAware" in html
     series = embedded_json(html, "bankroll-data")
-    assert [line["name"] for line in series][:2] == ["Dixon-Coles", "Poisson"]
+    assert [line["name"] for line in series][:2] == ["Shots-adjusted", "Dixon-Coles"]
 
 
 def test_models_page(client: FlaskClient) -> None:
@@ -73,7 +73,7 @@ def test_models_page(client: FlaskClient) -> None:
     for name in ("Dixon-Coles", "Poisson", "Shots-adjusted", "Bet365 pre-match, margin removed"):
         assert name in html
     calibration = embedded_json(html, "calibration-data")
-    assert [line["name"] for line in calibration] == ["Dixon-Coles", "Poisson", "Shots-adjusted"]
+    assert [line["name"] for line in calibration] == ["Shots-adjusted", "Dixon-Coles", "Poisson"]
     assert all("count" in point for point in calibration[0]["points"])
 
 
@@ -170,7 +170,7 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
 def test_headline_cards_lead_with_closing_line_value(result: BacktestResult) -> None:
     cards = views.headline_cards(result)
     assert cards[0].label == "Mean closing line value"
-    mean_clv = result.summary.set_index("strategy").loc["dixon-coles", "mean_clv"]
+    mean_clv = result.summary.set_index("strategy").loc["shots-adjusted", "mean_clv"]
     assert cards[0].value == f"{mean_clv:+.1%}"
 
 
@@ -210,7 +210,7 @@ def test_filter_bets(result: BacktestResult) -> None:
 
 def test_bet_page_totals(result: BacktestResult) -> None:
     page = views.bet_page(result, views.BetFilters())
-    bets = result.bets["dixon-coles"]
+    bets = result.bets["shots-adjusted"]
     assert page.totals["bets"] == len(bets)
     assert page.totals["profit"] == pytest.approx(bets["profit"].sum())
     assert len(page.rows) == views.PER_PAGE
@@ -262,7 +262,7 @@ def test_bets_can_be_ordered_by_model_chance(client: FlaskClient, result: Backte
     page = views.bet_page(result, views.BetFilters(sort="probability"))
     probabilities = list(page.rows["probability"])
     assert probabilities == sorted(probabilities, reverse=True)
-    assert probabilities[0] == result.bets["dixon-coles"]["probability"].max()
+    assert probabilities[0] == result.bets["shots-adjusted"]["probability"].max()
     html = client.get("/bets?sort=probability").get_data(as_text=True)
     assert 'value="probability" selected' in html
     assert views.BetFilters.from_args({"sort": "nonsense"}).sort == "newest"
