@@ -13,10 +13,21 @@ from dotenv import load_dotenv
 LEAGUES: dict[str, str] = {
     "E0": "Premier League",
     "E1": "Championship",
+    "E2": "League One",
     "SP1": "La Liga",
     "I1": "Serie A",
     "D1": "Bundesliga",
     "F1": "Ligue 1",
+}
+
+# Leagues fitted together, so a team keeps its ratings when it moves division.
+# The teams that move each season put the divisions on one scale. They share one
+# home advantage: from 2019/20 to 2025/26 it was 0.19 (log of home over away
+# goals) in E0, 0.21 in E1 and 0.22 in E2, while it ranged from 0.06 to 0.29
+# between seasons of the same league.
+LINKED_LEAGUES: dict[str, tuple[str, ...]] = {
+    "E0": ("E0", "E1"),
+    "E1": ("E0", "E1", "E2"),
 }
 
 DEFAULT_LEAGUES: tuple[str, ...] = ("E0",)
@@ -135,6 +146,16 @@ def current_season(today: date | None = None) -> str:
     today = today or date.today()
     start_year = today.year if today.month >= 7 else today.year - 1
     return season_code(start_year)
+
+
+def linked_leagues(league: str, linked: bool = True) -> tuple[str, ...]:
+    """The leagues whose results a model for this league is fitted on."""
+    return LINKED_LEAGUES.get(league, (league,)) if linked else (league,)
+
+
+def can_fit_together(leagues: Iterable[str]) -> bool:
+    leagues = set(leagues)
+    return len(leagues) <= 1 or any(leagues <= set(group) for group in LINKED_LEAGUES.values())
 
 
 def season_start_year(code: str) -> int:

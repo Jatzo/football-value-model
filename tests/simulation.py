@@ -31,13 +31,19 @@ def simulate_league(
     start: str = "2020-08-01",
     league: str = "E0",
     season: str = "2021",
+    teams: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Play every pairing home and away `rounds` times, sampling each score from the model."""
+    """Play every pairing home and away `rounds` times, sampling each score from the model.
+
+    `teams` limits the league to some of the model's teams, so several divisions
+    can be simulated from one set of true strengths.
+    """
+    teams = list(teams or model.teams)
     rows = []
     date = pd.Timestamp(start)
     for _ in range(rounds):
-        for home in model.teams:
-            for away in model.teams:
+        for home in teams:
+            for away in teams:
                 if home == away:
                     continue
                 matrix = model.score_matrix(home, away)

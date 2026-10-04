@@ -19,7 +19,7 @@ import pandas as pd
 from scipy.optimize import minimize
 from scipy.stats import poisson
 
-from valuemodel.config import TRAINING_WINDOW_DAYS
+from valuemodel.config import TRAINING_WINDOW_DAYS, can_fit_together
 
 MAX_GOALS = 10
 
@@ -90,8 +90,10 @@ def prepare(
     window_days: int = TRAINING_WINDOW_DAYS,
 ) -> TrainingData:
     """Turn the matches before as_of into arrays ready for fitting."""
-    if matches["league"].nunique() > 1:
-        raise ValueError("Fit one league at a time, since each has its own home advantage")
+    if not can_fit_together(matches["league"].unique()):
+        raise ValueError(
+            "Only linked leagues can be fitted together, since they share a home advantage"
+        )
     window = training_window(matches, as_of, window_days)
     if window.empty:
         raise ValueError(f"No matches to fit before {as_of.date()}")

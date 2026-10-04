@@ -203,10 +203,36 @@ def test_unknown_team_raises(league: pd.DataFrame, as_of: pd.Timestamp) -> None:
         fitted.score_matrix("Never Seen", "Team 00")
 
 
-def test_one_league_per_fit(league: pd.DataFrame, as_of: pd.Timestamp) -> None:
-    mixed = pd.concat([league, league.assign(league="E1")])
-    with pytest.raises(ValueError, match="one league"):
+def test_only_linked_leagues_fit_together(league: pd.DataFrame, as_of: pd.Timestamp) -> None:
+    mixed = pd.concat([league, league.assign(league="SP1")])
+    with pytest.raises(ValueError, match="linked"):
         fit_poisson(mixed, as_of, xi=0.0)
+
+
+def test_linked_divisions_put_every_team_on_one_scale() -> None:
+    """Two divisions never meet, but the teams moving between them link their strengths."""
+    rng = np.random.default_rng(21)
+    truth = true_model(12, 0.0, rng)
+    top, bottom = list(truth.teams[:6]), list(truth.teams[6:])
+    promoted, relegated = bottom[0], top[-1]
+    divisions = [
+        ("2022-08-01", "2223", top, bottom),
+        ("2023-08-01", "2324", [*top[:-1], promoted], [relegated, *bottom[1:]]),
+    ]
+    matches = pd.concat(
+        [
+            simulate_league(truth, 15, rng, start=start, league=league, season=season, teams=teams)
+            for start, season, upper, lower in divisions
+            for league, teams in (("E0", upper), ("E1", lower))
+        ],
+        ignore_index=True,
+    )
+    fitted = fit_poisson(matches, matches["date"].max() + pd.Timedelta(days=1), xi=0.0)
+    assert rms(aligned(fitted, truth, fitted.attack), truth.attack) < 0.1
+    assert rms(aligned(fitted, truth, fitted.defence), truth.defence) < 0.1
+    # A team never seen in the top division is still rated on the same scale.
+    never_promoted = fitted.teams.index(bottom[-1])
+    assert fitted.attack[never_promoted] == pytest.approx(truth.attack[-1], abs=0.15)
 
 
 def test_fit_needs_matches_before_the_date(league: pd.DataFrame) -> None:

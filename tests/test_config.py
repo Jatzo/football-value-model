@@ -5,8 +5,10 @@ import pytest
 
 from valuemodel.config import (
     Settings,
+    can_fit_together,
     current_season,
     history_seasons,
+    linked_leagues,
     load_settings,
     season_code,
     season_label,
@@ -114,3 +116,25 @@ def test_season_start_year() -> None:
 def test_history_seasons_cover_the_training_window() -> None:
     assert history_seasons(["2425", "2324"]) == ["2021", "2122", "2223", "2324", "2425"]
     assert history_seasons(["0001"]) == ["9798", "9899", "9900", "0001"]
+
+
+def test_linked_leagues() -> None:
+    assert linked_leagues("E0") == ("E0", "E1")
+    assert linked_leagues("E1") == ("E0", "E1", "E2")
+    assert linked_leagues("E0", linked=False) == ("E0",)
+    assert linked_leagues("SP1") == ("SP1",)
+
+
+@pytest.mark.parametrize(
+    ("leagues", "expected"),
+    [
+        (["E0"], True),
+        (["SP1"], True),
+        (["E0", "E1"], True),
+        (["E0", "E1", "E2"], True),
+        (["E0", "SP1"], False),
+        (["E1", "D1"], False),
+    ],
+)
+def test_can_fit_together(leagues: list[str], expected: bool) -> None:
+    assert can_fit_together(leagues) is expected
