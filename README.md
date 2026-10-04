@@ -6,7 +6,7 @@ A Dixon-Coles model that prices football matches, compares its prices with bookm
 
 ## Status
 
-Work in progress. The data pipeline and both models are in place. Odds comparison, the backtest and the dashboard come next, and this README will report the backtest results, good or bad, once they exist.
+Work in progress. The data pipeline, both models, and odds comparison with paper staking are in place. The backtest and the dashboard come next, and this README will report the backtest results, good or bad, once they exist.
 
 ## Quick start
 
@@ -32,6 +32,12 @@ valuemodel predict --home Arsenal --away Chelsea --as-of 2025-02-01 --model pois
 ```
 
 Team names are spelt as football-data.co.uk spells them, for example `Man United` and `Nott'm Forest`.
+
+Add a bookmaker's decimal odds to see the edge on each outcome and the paper stake the model would put on any value bet:
+
+```bash
+valuemodel predict --home Arsenal --away Chelsea --odds 1.70 3.90 5.25 --totals-odds 1.95 1.95
+```
 
 ## How the model works
 
@@ -66,6 +72,14 @@ Both scores are lowest at 0.003, which means a match from about 230 days ago cou
 
 Of the 760 matches in those two seasons, 740 were scored. The other 20 involved a team with fewer than 10 matches in the training window, which in practice means a newly promoted side early in the season.
 
+## Finding value and staking
+
+A bookmaker's odds imply a probability of `1 / odds` for each outcome. Those probabilities add up to more than 1, and the excess is the bookmaker's margin. To compare the model with the market fairly, the margin is removed in one of two ways. The proportional method scales every outcome down by the same factor. The power method raises every implied probability to the same exponent, which takes more off longshots than favourites. Bookmakers tend to load their margin onto unlikely outcomes, so the power method is the default.
+
+A bet has value when `model probability * odds - 1` is at least the edge threshold, 3% by default. This uses the odds actually on offer, margin included, because that is the price a bet would be struck at. At most one bet is taken per market per match: the outcome with the biggest edge in the match result, and the same in over/under 2.5 goals.
+
+Stakes are paper only. The default is quarter Kelly: a quarter of the stake the Kelly criterion recommends, because full Kelly assumes the model's probabilities are exactly right. Flat staking is the alternative. Either way, no single bet can exceed 2% of the current bankroll, and nothing is staked without a positive edge.
+
 ## Configuration
 
 Settings come from environment variables. Copy `.env.example` to `.env` to change them.
@@ -74,6 +88,14 @@ Settings come from environment variables. Copy `.env.example` to `.env` to chang
 | --- | --- | --- |
 | `VALUEMODEL_DATA_DIR` | `data` | Where downloaded files are cached |
 | `VALUEMODEL_REQUEST_DELAY` | `2` | Seconds to wait between downloads |
+| `VALUEMODEL_MARGIN_METHOD` | `power` | How the bookmaker's margin is removed: `power` or `proportional` |
+| `VALUEMODEL_EDGE_THRESHOLD` | `0.03` | Smallest edge that counts as value |
+| `VALUEMODEL_STAKING` | `kelly` | `kelly` or `flat` |
+| `VALUEMODEL_KELLY_FRACTION` | `0.25` | Share of the full Kelly stake to use |
+| `VALUEMODEL_MAX_STAKE` | `0.02` | Largest stake on one bet, as a share of the current bankroll |
+| `VALUEMODEL_FLAT_STAKE` | `0.01` | Flat stake, as a share of the starting bankroll |
+| `VALUEMODEL_STARTING_BANKROLL` | `1000` | Starting bankroll in units |
+| `VALUEMODEL_BOOKMAKER` | `b365` | Whose pre-match prices bets are taken at: `b365` or `pinnacle` |
 
 ## The data
 
