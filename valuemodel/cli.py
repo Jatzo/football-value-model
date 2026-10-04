@@ -6,7 +6,9 @@ import sqlite3
 import sys
 import time
 from collections.abc import Callable, Sequence
+from datetime import date
 from difflib import get_close_matches
+from pathlib import Path
 
 import pandas as pd
 
@@ -43,6 +45,7 @@ from valuemodel.markets import predict
 from valuemodel.models.common import UnknownTeamError
 from valuemodel.odds import MARKETS, check_quotes
 from valuemodel.report import format_report, staking_description
+from valuemodel.schedule import SCHEDULE_FILES, download_schedule, load_schedule, upcoming_games
 from valuemodel.staking import stake
 from valuemodel.store import connect, database_path, save_run
 from valuemodel.teams import normalise_team
@@ -323,14 +326,20 @@ def run_predict(
     return 0
 
 
-def run_fixtures(leagues: Sequence[str]) -> int:
+def run_fixtures(leagues: Sequence[str], today: date | None = None) -> int:
     settings = load_settings()
+    today = today or date.today()
     season = current_season()
+    scheduled = [league for league in leagues if league in SCHEDULE_FILES]
     try:
         with make_client() as client:
             path = download_fixtures(client, settings)
             time.sleep(settings.request_delay)
             download_seasons(client, leagues, [season], settings, force=True)
+            schedules = {}
+            for league in scheduled:
+                time.sleep(settings.request_delay)
+                schedules[league] = download_schedule(client, league, season, settings)
     except DownloadError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -343,7 +352,18 @@ def run_fixtures(leagues: Sequence[str]) -> int:
         played = load_season(cache_path(settings.raw_dir, league, season), league, season)
         latest = played["date"].max().date() if len(played) else "no matches yet"
         print(f"{league} {season_label(season)}: {len(played)} results, latest {latest}")
+    for league in leagues:
+        print(_schedule_line(league, schedules.get(league), today))
     return 0
+
+
+def _schedule_line(league: str, path: Path | None, today: date) -> str:
+    if path is None:
+        return f"{league} schedule: no source for this league"
+    games = upcoming_games(load_schedule(path, league), today, rounds=None)
+    if games.empty:
+        return f"{league} schedule: no games left to play"
+    return f"{league} schedule: {len(games)} games to play, next on {games['date'].min().date()}"
 
 
 def run_tune_shots(league: str, weights: Sequence[float]) -> int:

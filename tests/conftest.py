@@ -21,6 +21,11 @@ class FakeSource:
             return httpx.Response(200, content=self.body)
         if request.url.path == "/fixtures.csv":
             return httpx.Response(200, content=(self.fixtures_dir / "upcoming.csv").read_bytes())
+        if request.url.host == "raw.githubusercontent.com":
+            # Only the 2026/27 schedules are saved, so they stand in for any season.
+            league = {"en.1.json": "E0", "en.2.json": "E1"}[request.url.path.split("/")[-1]]
+            schedule = self.fixtures_dir / f"schedule_{league}_2627.json"
+            return httpx.Response(200, content=schedule.read_bytes())
         season, league = request.url.path.split("/")[-2:]
         fixture = self.fixtures_dir / f"{league.removesuffix('.csv')}_{season}.csv"
         if not fixture.exists():

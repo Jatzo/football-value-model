@@ -272,7 +272,11 @@ def download_csv(client: httpx.Client, url: str, path: Path) -> None:
     content = response.content
     if not content.strip() or content.lstrip().startswith(b"<"):
         raise DownloadError(f"{url} did not return a CSV file")
+    save_file(path, content)
 
+
+def save_file(path: Path, content: bytes) -> None:
+    """Write a download, replacing any earlier copy only once it is complete."""
     path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_suffix(".part")
     partial.write_bytes(content)

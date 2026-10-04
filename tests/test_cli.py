@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -207,12 +208,20 @@ def test_fixtures_downloads_the_file_and_refreshes_this_season(
     fake_site: FakeSource, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(cli, "current_season", lambda: "2526")
-    assert cli.main(["fixtures", "--leagues", "E0"]) == 0
+    assert cli.run_fixtures(["E0"], today=date(2026, 10, 4)) == 0
     out = capsys.readouterr().out
     assert "Fixtures file has 12 matches" in out
     assert "E0 2025/26: 20 results, latest 2026-01-17" in out
+    assert "E0 schedule: 20 games to play, next on 2026-10-10" in out
     assert fake_site.requests[0].endswith("/fixtures.csv")
     assert fake_site.requests[1].endswith("/2526/E0.csv")
+    assert fake_site.requests[2].endswith("/2025-26/en.1.json")
+
+
+def test_leagues_without_a_schedule_source_are_named() -> None:
+    assert cli._schedule_line("SP1", None, date(2026, 10, 4)) == (
+        "SP1 schedule: no source for this league"
+    )
 
 
 def test_fixtures_refreshes_both_english_leagues_by_default() -> None:
