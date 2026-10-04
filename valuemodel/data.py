@@ -70,6 +70,14 @@ def _odds_candidates() -> dict[str, tuple[str, ...]]:
 
 
 ODDS_CANDIDATES = _odds_candidates()
+
+
+def odds_columns(source: str) -> list[str]:
+    """One source's pre-match odds columns, in the order home, draw, away, over, under."""
+    outcomes = [*OUTCOMES_1X2.values(), *OUTCOMES_TOTALS.values()]
+    return [f"{source}_{outcome}" for outcome in outcomes]
+
+
 ODDS_COLUMNS: tuple[str, ...] = tuple(ODDS_CANDIDATES)
 MATCH_COLUMNS: tuple[str, ...] = (
     "league",

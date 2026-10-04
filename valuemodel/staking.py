@@ -15,8 +15,8 @@ def kelly_stake(
     probability: float,
     odds: float,
     bankroll: float,
-    fraction: float = 0.25,
-    max_share: float = 0.02,
+    fraction: float = Settings.kelly_fraction,
+    max_share: float = Settings.max_stake,
 ) -> float:
     """Fractional Kelly stake, never more than max_share of the bankroll.
 
@@ -28,7 +28,7 @@ def kelly_stake(
     return min(fraction * kelly_fraction(probability, odds), max_share) * bankroll
 
 
-def flat_stake(bankroll: float, unit: float, max_share: float = 0.02) -> float:
+def flat_stake(bankroll: float, unit: float, max_share: float = Settings.max_stake) -> float:
     """The same amount on every bet, still within the per-bet cap."""
     if bankroll <= 0:
         return 0.0

@@ -16,9 +16,9 @@ from valuemodel.config import (
     BOOKMAKERS,
     DEFAULT_XI,
     MIN_TEAM_MATCHES,
-    TRAINING_WINDOW_DAYS,
     Settings,
 )
+from valuemodel.data import odds_columns
 from valuemodel.markets import OUTCOMES
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
@@ -36,6 +36,11 @@ MODELS: dict[str, FitFunction] = {"dixon-coles": fit_dixon_coles, "poisson": fit
 # "simply follow the market" strategy: bet wherever the bookmaker is more
 # generous than the sharpest price available at the same time.
 MARKET_STRATEGY = "market"
+
+# The model the report and dashboard lead with. Poisson is the baseline.
+MAIN_MODEL = "dixon-coles"
+
+CALIBRATION_BINS = 10
 MARKET_SOURCE = "pinnacle"
 CLOSING_SOURCE = "pinnacle_close"
 
@@ -58,10 +63,6 @@ BET_COLUMNS: tuple[str, ...] = (
 )
 
 _BOOTSTRAP_SAMPLES = 2000
-
-
-def odds_columns(source: str) -> list[str]:
-    return [f"{source}_{outcome}" for outcome in OUTCOMES]
 
 
 def market_forecasts(matches: pd.DataFrame, source: str, method: str) -> pd.DataFrame:
@@ -246,9 +247,7 @@ def model_scores(forecasts: dict[str, pd.DataFrame], matches: pd.DataFrame) -> p
     return pd.DataFrame(rows)
 
 
-def calibration_table(
-    forecasts: pd.DataFrame, matches: pd.DataFrame, bins: int = 10
-) -> pd.DataFrame:
+def calibration_table(forecasts: pd.DataFrame, matches: pd.DataFrame) -> pd.DataFrame:
     """How often outcomes forecast at each probability actually happened.
 
     Home, draw and away forecasts are pooled, so a well calibrated model has
@@ -258,10 +257,10 @@ def calibration_table(
     results = matches.loc[priced.index, "result"]
     probabilities = priced[list(MARKETS["1x2"])].to_numpy(dtype=float).ravel()
     happened = np.column_stack([results == code for code in ("H", "D", "A")]).ravel()
-    edges = np.linspace(0, 1, bins + 1)
-    which = np.clip(np.digitize(probabilities, edges) - 1, 0, bins - 1)
+    edges = np.linspace(0, 1, CALIBRATION_BINS + 1)
+    which = np.clip(np.digitize(probabilities, edges) - 1, 0, CALIBRATION_BINS - 1)
     rows = []
-    for b in range(bins):
+    for b in range(CALIBRATION_BINS):
         in_bin = which == b
         if in_bin.any():
             rows.append(
@@ -322,7 +321,6 @@ def run_backtest(
     settings: Settings,
     xi: float = DEFAULT_XI,
     min_matches: int = MIN_TEAM_MATCHES,
-    window_days: int = TRAINING_WINDOW_DAYS,
 ) -> BacktestResult:
     """Forecast, bet and score every match of the given seasons in one league."""
     seasons = tuple(seasons)
@@ -331,7 +329,7 @@ def run_backtest(
     result = BacktestResult(league=league, seasons=seasons, xi=xi, settings=settings)
 
     forecasts = {
-        name: walk_forward_forecasts(history, seasons, fit, xi, min_matches, window_days)
+        name: walk_forward_forecasts(history, seasons, fit, xi, min_matches)
         for name, fit in MODELS.items()
     }
     # Following the market means betting where the bookmaker beats Pinnacle, which

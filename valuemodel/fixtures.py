@@ -13,7 +13,14 @@ import httpx
 import pandas as pd
 
 from valuemodel.config import MIN_TEAM_MATCHES, Settings, current_season
-from valuemodel.data import MATCH_COLUMNS, ODDS_COLUMNS, download_csv, read_raw, standardise
+from valuemodel.data import (
+    MATCH_COLUMNS,
+    ODDS_COLUMNS,
+    download_csv,
+    odds_columns,
+    read_raw,
+    standardise,
+)
 from valuemodel.markets import OUTCOMES, price_matches
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.odds import MARKETS, find_value
@@ -57,11 +64,7 @@ class PricedFixtures:
 
 
 def price_fixtures(
-    matches: pd.DataFrame,
-    fixtures: pd.DataFrame,
-    settings: Settings,
-    xi: float,
-    min_matches: int = MIN_TEAM_MATCHES,
+    matches: pd.DataFrame, fixtures: pd.DataFrame, settings: Settings, xi: float
 ) -> PricedFixtures:
     """Price every fixture in a league that has cached results.
 
@@ -83,7 +86,9 @@ def price_fixtures(
         except (ValueError, RuntimeError) as error:
             unpriced[league] = str(error)
             continue
-        frames.append(_with_odds(upcoming, price_matches(model, upcoming, min_matches), settings))
+        frames.append(
+            _with_odds(upcoming, price_matches(model, upcoming, MIN_TEAM_MATCHES), settings)
+        )
         priced.append(league)
     result = pd.concat(frames) if frames else fixtures.iloc[0:0]
     return PricedFixtures(fixtures=result, priced_leagues=priced, unpriced_leagues=unpriced)
@@ -91,7 +96,7 @@ def price_fixtures(
 
 def _with_odds(upcoming: pd.DataFrame, forecasts: pd.DataFrame, settings: Settings) -> pd.DataFrame:
     """Add the bookmaker's odds, the edge on every outcome and any value bets."""
-    odds = upcoming[[f"{settings.bookmaker}_{outcome}" for outcome in OUTCOMES]]
+    odds = upcoming[odds_columns(settings.bookmaker)]
     odds.columns = list(OUTCOMES)
     priced = upcoming.join(forecasts)
     for outcome in OUTCOMES:

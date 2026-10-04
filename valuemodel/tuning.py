@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 import pandas as pd
 
-from valuemodel.config import MIN_TEAM_MATCHES, TRAINING_WINDOW_DAYS
+from valuemodel.config import MIN_TEAM_MATCHES
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.scoring import (
     brier_score,
@@ -39,12 +39,11 @@ def evaluate_xi(
     xi_values: Iterable[float] = XI_GRID,
     fit: FitFunction = fit_dixon_coles,
     min_matches: int = MIN_TEAM_MATCHES,
-    window_days: int = TRAINING_WINDOW_DAYS,
 ) -> pd.DataFrame:
     """Score walk-forward forecasts for each candidate xi."""
     seasons = list(seasons)
     rows = []
     for xi in xi_values:
-        forecasts = walk_forward_forecasts(matches, seasons, fit, xi, min_matches, window_days)
+        forecasts = walk_forward_forecasts(matches, seasons, fit, xi, min_matches)
         rows.append({"xi": xi, **score_forecasts(forecasts)})
     return pd.DataFrame(rows)

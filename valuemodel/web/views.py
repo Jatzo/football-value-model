@@ -9,14 +9,13 @@ from datetime import datetime
 
 import pandas as pd
 
-from valuemodel.backtest import MODELS, BacktestResult
+from valuemodel.backtest import MAIN_MODEL, MODELS, BacktestResult
 from valuemodel.config import DEFAULT_SEASONS, DEFAULT_XI, LEAGUES, Settings, current_season
 from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
 from valuemodel.labels import (
     MARKET_LABELS,
     NO_COMMON_MATCHES,
-    OUTCOME_LABELS,
     STRATEGY_LABELS,
     is_missing,
     label,
@@ -24,11 +23,11 @@ from valuemodel.labels import (
     share,
     tone,
 )
+from valuemodel.odds import MARKETS
 
 PER_PAGE = 50
 
 MODEL_FORECASTERS = tuple(MODELS)
-MAIN_MODEL = "dixon-coles"
 
 
 @dataclass
@@ -269,16 +268,16 @@ def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
     for fixture in priced[priced["league"] == league].to_dict("records"):
         cells = []
         if fixture["reliable"]:
-            for outcome in OUTCOME_LABELS:
-                market = "1x2" if outcome in ("home", "draw", "away") else "totals"
-                cells.append(
-                    PriceCell(
-                        fair_odds=1 / fixture[outcome],
-                        offered=fixture[f"odds_{outcome}"],
-                        edge=fixture[f"edge_{outcome}"],
-                        value=fixture[f"value_{market}"] == outcome,
+            for market, outcomes in MARKETS.items():
+                for outcome in outcomes:
+                    cells.append(
+                        PriceCell(
+                            fair_odds=1 / fixture[outcome],
+                            offered=fixture[f"odds_{outcome}"],
+                            edge=fixture[f"edge_{outcome}"],
+                            value=fixture[f"value_{market}"] == outcome,
+                        )
                     )
-                )
         kickoff = fixture["kickoff"]
         rows.append(
             FixtureRow(

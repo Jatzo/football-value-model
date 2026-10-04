@@ -195,15 +195,15 @@ class FittedModel:
         away_rate = np.exp(self.attack[a] + self.defence[h])
         return float(home_rate), float(away_rate)
 
-    def score_matrix(self, home: str, away: str, max_goals: int = MAX_GOALS) -> np.ndarray:
+    def score_matrix(self, home: str, away: str) -> np.ndarray:
         """Probability of each score, with home goals on rows and away goals on columns.
 
         The Dixon-Coles adjustment moves probability between the four low scores
         without changing the total, so the only reason to renormalise is the tiny
-        amount of probability beyond max_goals that the matrix leaves out.
+        amount of probability beyond MAX_GOALS that the matrix leaves out.
         """
         home_rate, away_rate = self.expected_goals(home, away)
-        goals = np.arange(max_goals + 1)
+        goals = np.arange(MAX_GOALS + 1)
         matrix = np.outer(poisson.pmf(goals, home_rate), poisson.pmf(goals, away_rate))
         matrix *= tau(goals[:, None], goals[None, :], home_rate, away_rate, self.rho)
         return matrix / matrix.sum()

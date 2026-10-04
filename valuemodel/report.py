@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from valuemodel.backtest import BacktestResult
+from valuemodel.backtest import MAIN_MODEL, BacktestResult
 from valuemodel.config import BOOKMAKERS, Settings, season_label
 from valuemodel.labels import (
     FORECASTER_LABELS,
@@ -160,7 +160,7 @@ def _calibration_section(model: str, calibration: pd.DataFrame) -> str:
     )
 
 
-def format_report(result: BacktestResult, calibration_model: str = "dixon-coles") -> str:
+def format_report(result: BacktestResult) -> str:
     sections = [
         _header(result),
         _clv_section(result.summary),
@@ -168,8 +168,6 @@ def format_report(result: BacktestResult, calibration_model: str = "dixon-coles"
         _season_section(result.season_summary),
         _scores_section(result.scores),
     ]
-    if calibration_model in result.calibration:
-        sections.append(
-            _calibration_section(calibration_model, result.calibration[calibration_model])
-        )
+    if MAIN_MODEL in result.calibration:
+        sections.append(_calibration_section(MAIN_MODEL, result.calibration[MAIN_MODEL]))
     return "\n\n".join(sections)
