@@ -18,7 +18,20 @@ LEAGUES: dict[str, str] = {
 
 DEFAULT_LEAGUES: tuple[str, ...] = ("E0",)
 
-DEFAULT_SEASONS: tuple[str, ...] = ("2122", "2223", "2324", "2425", "2526")
+# Seasons are split so that nothing used to choose settings is later reported
+# as a backtest result. The first two only ever serve as training history.
+HISTORY_SEASONS: tuple[str, ...] = ("1920", "2021")
+TUNING_SEASONS: tuple[str, ...] = ("2122", "2223")
+BACKTEST_SEASONS: tuple[str, ...] = ("2324", "2425", "2526")
+DEFAULT_SEASONS: tuple[str, ...] = HISTORY_SEASONS + TUNING_SEASONS + BACKTEST_SEASONS
+
+# Matches older than this are left out of a fit. Time decay already gives them
+# little weight, and dropping them keeps each refit fast.
+TRAINING_WINDOW_DAYS = 1095
+
+# Teams with fewer matches than this in the training window get unreliable
+# estimates, so their games are flagged and not bet on.
+MIN_TEAM_MATCHES = 10
 
 USER_AGENT = "football-value-model (+https://github.com/Jatzo/footballbetfinder)"
 
