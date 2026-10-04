@@ -17,7 +17,6 @@ def true_model(n_teams: int, rho: float, rng: np.random.Generator) -> FittedMode
         defence=defence,
         home_advantage=0.25,
         rho=rho,
-        xi=0.0,
         as_of=pd.Timestamp("2000-01-01"),
         match_counts={},
     )

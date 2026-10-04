@@ -86,7 +86,6 @@ def fit_dixon_coles(
         defence=defence,
         home_advantage=float(home_advantage),
         rho=float(params[-1]),
-        xi=xi,
         as_of=as_of,
         match_counts=data.match_counts,
     )

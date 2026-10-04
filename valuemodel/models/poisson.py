@@ -50,7 +50,6 @@ def fit_poisson(
         defence=defence,
         home_advantage=float(home_advantage),
         rho=0.0,
-        xi=xi,
         as_of=as_of,
         match_counts=data.match_counts,
     )

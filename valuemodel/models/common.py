@@ -178,7 +178,6 @@ class FittedModel:
     defence: np.ndarray
     home_advantage: float
     rho: float
-    xi: float
     as_of: pd.Timestamp
     match_counts: dict[str, int]
 
