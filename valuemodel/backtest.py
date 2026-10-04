@@ -21,7 +21,6 @@ from valuemodel.scoring import brier_score, log_loss, outcome_indices, ranked_pr
 from valuemodel.staking import stake
 from valuemodel.walkforward import (
     FitFunction,
-    odds_capture_date,
     walk_forward_forecasts,
 )
 
@@ -306,9 +305,7 @@ def run_backtest(
     result = BacktestResult(league=league, seasons=seasons, xi=xi, settings=settings)
 
     forecasts = {
-        name: walk_forward_forecasts(
-            history, seasons, fit, xi, odds_capture_date, min_matches, window_days
-        )
+        name: walk_forward_forecasts(history, seasons, fit, xi, min_matches, window_days)
         for name, fit in MODELS.items()
     }
     forecasts[MARKET_STRATEGY] = market_forecasts(targets, MARKET_SOURCE, settings.margin_method)

@@ -10,17 +10,10 @@ from valuemodel.markets import OUTCOMES, price_matches
 from valuemodel.models.common import FittedModel
 
 FitFunction = Callable[[pd.DataFrame, pd.Timestamp, float, int], FittedModel]
-AsOfRule = Callable[[pd.Series], pd.Series]
-
 
 # Days back from each weekday to the afternoon its pre-match odds were collected:
 # Friday for games from Friday to Monday, Tuesday for games from Tuesday to Thursday.
 _DAYS_SINCE_CAPTURE: dict[int, int] = {0: 3, 1: 0, 2: 1, 3: 2, 4: 0, 5: 1, 6: 2}
-
-
-def week_start(dates: pd.Series) -> pd.Series:
-    """The Monday of each match's week."""
-    return dates.dt.to_period("W").dt.start_time
 
 
 def odds_capture_date(dates: pd.Series) -> pd.Series:
@@ -39,13 +32,12 @@ def walk_forward_forecasts(
     seasons: Iterable[str],
     fit: FitFunction,
     xi: float,
-    as_of_rule: AsOfRule = week_start,
     min_matches: int = MIN_TEAM_MATCHES,
     window_days: int = TRAINING_WINDOW_DAYS,
 ) -> pd.DataFrame:
-    """Forecast every match in the given seasons from results before its as_of date.
+    """Forecast every match in the given seasons from results before its odds were taken.
 
-    The model is refitted once for each distinct as_of date and prices every
+    The model is refitted once for each odds capture date and prices every
     match that shares it. Matches involving a team with too little history are
     kept but marked unreliable and left unpriced. The result is indexed like
     `matches`, so odds and results can be joined back on.
@@ -54,7 +46,7 @@ def walk_forward_forecasts(
     frames = []
     for league, league_targets in targets.groupby("league"):
         history = matches[matches["league"] == league]
-        for as_of, group in league_targets.groupby(as_of_rule(league_targets["date"])):
+        for as_of, group in league_targets.groupby(odds_capture_date(league_targets["date"])):
             model = fit(history, as_of, xi, window_days)
             prices = price_matches(model, group, min_matches).assign(as_of=as_of)
             frames.append(group[[c for c in MATCH_COLUMNS if c in group]].join(prices))

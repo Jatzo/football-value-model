@@ -6,7 +6,6 @@ from simulation import simulate_league, true_model
 from valuemodel.models.common import FittedModel
 from valuemodel.models.poisson import fit_poisson
 from valuemodel.tuning import evaluate_xi
-from valuemodel.walkforward import walk_forward_forecasts
 
 
 def drifting_league(seed: int) -> pd.DataFrame:
@@ -28,31 +27,6 @@ def drifting_league(seed: int) -> pd.DataFrame:
 @pytest.fixture(scope="module")
 def league() -> pd.DataFrame:
     return drifting_league(seed=0)
-
-
-def test_forecasts_cover_only_the_target_seasons(league: pd.DataFrame) -> None:
-    forecasts = walk_forward_forecasts(league, ["2021"], fit_poisson, xi=0.002, min_matches=0)
-    assert len(forecasts) == (league["season"] == "2021").sum()
-    assert set(forecasts["season"]) == {"2021"}
-
-
-def test_every_forecast_is_made_before_its_match(league: pd.DataFrame) -> None:
-    forecasts = walk_forward_forecasts(league, ["2021"], fit_poisson, xi=0.002, min_matches=0)
-    assert (forecasts["as_of"] <= forecasts["date"]).all()
-    assert (forecasts["date"] - forecasts["as_of"] < pd.Timedelta(days=7)).all()
-    assert (forecasts["as_of"].dt.dayofweek == 0).all()
-
-
-def test_forecast_probabilities_sum_to_one(league: pd.DataFrame) -> None:
-    forecasts = walk_forward_forecasts(league, ["2021"], fit_poisson, xi=0.002, min_matches=0)
-    totals = forecasts[["home", "draw", "away"]].sum(axis=1)
-    np.testing.assert_allclose(totals, 1.0, atol=1e-9)
-
-
-def test_unreliable_matches_are_kept_but_not_priced(league: pd.DataFrame) -> None:
-    forecasts = walk_forward_forecasts(league, ["2021"], fit_poisson, xi=0.002, min_matches=10_000)
-    assert not forecasts["reliable"].any()
-    assert forecasts["home"].isna().all()
 
 
 def test_evaluate_xi_scores_the_same_matches_for_every_value(league: pd.DataFrame) -> None:

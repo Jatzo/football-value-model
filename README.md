@@ -26,16 +26,16 @@ The decay rate `xi` was chosen by validation, not guesswork. The seasons are spl
 | 2021/22 and 2022/23 | Choosing `xi` |
 | 2023/24 to 2025/26 | Backtest |
 
-For each candidate `xi`, the model was refitted at the start of every week of 2021/22 and 2022/23 using only earlier results, then used to forecast that week's matches. Lower scores are better:
+For each candidate `xi`, the model walked through 2021/22 and 2022/23 on exactly the backtest's schedule, described below, refitting before each round of matches using only earlier results. Lower scores are better:
 
 | `xi` per day | Log loss | Ranked probability score |
 | --- | --- | --- |
-| 0 | 0.98408 | 0.20511 |
-| 0.001 | 0.97970 | 0.20345 |
-| 0.002 | 0.97714 | 0.20241 |
-| 0.003 | 0.97638 | 0.20196 |
-| 0.004 | 0.97710 | 0.20201 |
-| 0.005 | 0.97903 | 0.20246 |
+| 0 | 0.98381 | 0.20504 |
+| 0.001 | 0.97930 | 0.20335 |
+| 0.002 | 0.97668 | 0.20230 |
+| 0.003 | 0.97589 | 0.20187 |
+| 0.004 | 0.97659 | 0.20193 |
+| 0.005 | 0.97848 | 0.20238 |
 
 Both scores are lowest at 0.003, so a match from about 230 days ago counts half as much as one played today. The Poisson baseline gives the same answer, and anything from about 0.0025 to 0.004 would give very similar forecasts. `valuemodel tune-xi` reproduces the table.
 
