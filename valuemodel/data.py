@@ -1,4 +1,4 @@
-"""Read, clean and standardise football-data.co.uk results and odds files.
+"""Download, cache, clean and standardise football-data.co.uk results and odds.
 
 Column names change between seasons. The functions here map every era onto one
 schema so the rest of the project never sees the raw names.
@@ -6,13 +6,25 @@ schema so the rest of the project never sees the raw names.
 
 import io
 import logging
+import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
+import httpx
 import pandas as pd
 
+from valuemodel.config import USER_AGENT, Settings
 from valuemodel.teams import normalise_team
 
 logger = logging.getLogger(__name__)
+
+# The www host answers with a redirect, so go straight to the bare domain.
+BASE_URL = "https://football-data.co.uk/mmz4281"
+
+
+class DownloadError(RuntimeError):
+    """Raised when the data source does not return a usable CSV file."""
+
 
 OUTCOMES_1X2: dict[str, str] = {"H": "home", "D": "draw", "A": "away"}
 OUTCOMES_TOTALS: dict[str, str] = {">2.5": "over25", "<2.5": "under25"}
@@ -190,3 +202,81 @@ def load_season(path: Path, league: str, season: str) -> pd.DataFrame:
         )
     clean = frame.drop(index=problems.index)
     return clean.sort_values(["date", "kickoff", "home_team"]).reset_index(drop=True)
+
+
+def season_url(league: str, season: str) -> str:
+    return f"{BASE_URL}/{season}/{league}.csv"
+
+
+def cache_path(raw_dir: Path, league: str, season: str) -> Path:
+    return raw_dir / f"{league}_{season}.csv"
+
+
+def make_client() -> httpx.Client:
+    return httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30.0, follow_redirects=True)
+
+
+def download_season(
+    client: httpx.Client, league: str, season: str, raw_dir: Path, force: bool = False
+) -> bool:
+    """Save one season to the cache. Returns False when a cached copy was used instead."""
+    path = cache_path(raw_dir, league, season)
+    if path.exists() and not force:
+        return False
+
+    url = season_url(league, season)
+    try:
+        response = client.get(url)
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        raise DownloadError(f"Could not download {url}: {error}") from error
+
+    # A missing season can come back as an empty body or an HTML page rather
+    # than an error status, and caching either would break every later load.
+    content = response.content
+    if not content.strip() or content.lstrip().startswith(b"<"):
+        raise DownloadError(f"{url} did not return a CSV file")
+
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    partial = path.with_suffix(".part")
+    partial.write_bytes(content)
+    partial.replace(path)
+    return True
+
+
+def download_seasons(
+    client: httpx.Client,
+    leagues: Iterable[str],
+    seasons: Iterable[str],
+    settings: Settings,
+    force: bool = False,
+    sleep: Callable[[float], None] = time.sleep,
+) -> list[tuple[str, str, bool]]:
+    """Download several seasons, pausing between requests to be polite to the source."""
+    results = []
+    fetched_any = False
+    for league in leagues:
+        for season in seasons:
+            if fetched_any and (force or not cache_path(settings.raw_dir, league, season).exists()):
+                sleep(settings.request_delay)
+            downloaded = download_season(client, league, season, settings.raw_dir, force)
+            fetched_any = fetched_any or downloaded
+            results.append((league, season, downloaded))
+    return results
+
+
+def load_matches(
+    leagues: Iterable[str], seasons: Iterable[str], settings: Settings
+) -> pd.DataFrame:
+    """Load cached seasons into one date-ordered frame. Nothing is downloaded here."""
+    frames = []
+    for league in leagues:
+        for season in seasons:
+            path = cache_path(settings.raw_dir, league, season)
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"No cached data for {league} {season}. Run: valuemodel download"
+                )
+            frames.append(load_season(path, league, season))
+    matches = pd.concat(frames, ignore_index=True)
+    return matches.sort_values(["date", "kickoff", "league", "home_team"]).reset_index(drop=True)
