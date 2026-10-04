@@ -5,10 +5,9 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
-import numpy as np
 import pandas as pd
 
-from valuemodel.backtest import run_backtest
+from valuemodel.backtest import MODELS, run_backtest
 from valuemodel.config import (
     BACKTEST_SEASONS,
     DEFAULT_LEAGUES,
@@ -28,36 +27,21 @@ from valuemodel.data import (
     DownloadError,
     cache_path,
     download_seasons,
+    load_available,
     load_matches,
     load_season,
     make_client,
 )
 from valuemodel.fixtures import download_fixtures, load_fixtures
-from valuemodel.markets import MarketProbabilities, predict
-from valuemodel.models.common import FittedModel, UnknownTeamError
-from valuemodel.models.dixon_coles import fit_dixon_coles
-from valuemodel.models.poisson import fit_poisson
-from valuemodel.odds import MARKETS, edge, find_value, overround, remove_margin
+from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS
+from valuemodel.markets import predict
+from valuemodel.models.common import UnknownTeamError
+from valuemodel.odds import MARKETS, check_quotes
 from valuemodel.report import format_report, staking_description
 from valuemodel.staking import stake
 from valuemodel.store import connect, database_path, save_run
 from valuemodel.teams import normalise_team
 from valuemodel.tuning import XI_GRID, evaluate_xi
-
-MODELS: dict[str, Callable[..., FittedModel]] = {
-    "dixon-coles": fit_dixon_coles,
-    "poisson": fit_poisson,
-}
-
-MARKET_NAMES: dict[str, str] = {"1x2": "the match result", "totals": "over/under 2.5"}
-
-MARKET_LABELS: dict[str, str] = {
-    "home": "Home win",
-    "draw": "Draw",
-    "away": "Away win",
-    "over25": "Over 2.5",
-    "under25": "Under 2.5",
-}
 
 
 def _argument[T](check: Callable[[str], T]) -> Callable[[str], T]:
@@ -236,47 +220,39 @@ def run_tune_xi(league: str, model: str, xi_values: Sequence[float]) -> int:
 
 
 def _print_prices(
-    probabilities: MarketProbabilities, quoted: dict[str, float], settings: Settings
+    probabilities: dict[str, float], quoted: dict[str, float], settings: Settings
 ) -> None:
     """Show model prices and, for any quoted market, the edge against the bookmaker."""
-    fair_odds = probabilities.fair_odds()
-    margin_free: dict[str, float] = {}
-    for outcomes in MARKETS.values():
-        if all(name in quoted for name in outcomes):
-            prices = np.array([quoted[name] for name in outcomes])
-            margin_free.update(
-                zip(outcomes, remove_margin(prices, settings.margin_method), strict=True)
-            )
-
-    model = pd.DataFrame([probabilities.__dict__])
-    bets = find_value(model, pd.DataFrame([quoted], columns=model.columns), settings.edge_threshold)
-    chosen = set(bets["outcome"])
+    checks, margins = check_quotes(
+        probabilities, quoted, settings.margin_method, settings.edge_threshold
+    )
+    by_outcome = {check.outcome: check for check in checks}
 
     header = f"{'Market':<10}  {'Chance':>7}  {'Fair odds':>9}"
-    if quoted:
+    if checks:
         header += f"  {'Odds':>6}  {'Book chance':>11}  {'Edge':>7}"
     print(header)
-    for name, label in MARKET_LABELS.items():
-        chance = getattr(probabilities, name)
-        line = f"{label:<10}  {chance:>7.1%}  {fair_odds[name]:>9.2f}"
-        if name in quoted:
-            gain = edge(chance, quoted[name])
-            flag = "  value" if name in chosen else ""
-            line += f"  {quoted[name]:>6.2f}  {margin_free[name]:>11.1%}  {gain:>+7.1%}{flag}"
+    for outcome, label in OUTCOME_LABELS.items():
+        chance = probabilities[outcome]
+        line = f"{label:<10}  {chance:>7.1%}  {1 / chance:>9.2f}"
+        if check := by_outcome.get(outcome):
+            flag = "  value" if check.value else ""
+            line += (
+                f"  {check.odds:>6.2f}  {check.book_probability:>11.1%}  {check.edge:>+7.1%}{flag}"
+            )
         print(line)
-    if not quoted:
+    if not checks:
         return
 
-    for market, outcomes in MARKETS.items():
-        if all(name in quoted for name in outcomes):
-            margin = overround(np.array([quoted[name] for name in outcomes]))
-            print(f"Bookmaker margin on {MARKET_NAMES[market]}: {float(margin):.1%}")
-    if bets.empty:
+    for market, margin in margins.items():
+        print(f"Bookmaker margin, {MARKET_LABELS[market].lower()}: {margin:.1%}")
+    bets = [check for check in checks if check.value]
+    if not bets:
         print(f"No outcome reaches the {settings.edge_threshold:.0%} edge threshold")
-    for bet in bets.itertuples():
+    for bet in bets:
         amount = stake(bet.probability, bet.odds, settings.starting_bankroll, settings)
         print(
-            f"Paper bet: {MARKET_LABELS[bet.outcome]} at {bet.odds:.2f}, stake {amount:.2f} "
+            f"Paper bet: {OUTCOME_LABELS[bet.outcome]} at {bet.odds:.2f}, stake {amount:.2f} "
             f"of a {settings.starting_bankroll:g} unit bankroll ({staking_description(settings)})"
         )
 
@@ -291,7 +267,9 @@ def run_predict(
     quoted: dict[str, float],
 ) -> int:
     settings = load_settings()
-    matches = load_matches([league], DEFAULT_SEASONS, settings)
+    matches = load_available([league], [*DEFAULT_SEASONS, current_season()], settings)
+    if matches.empty:
+        raise FileNotFoundError(f"No cached data for {league}. Run: valuemodel download")
     if as_of is None:
         as_of = matches["date"].max() + pd.Timedelta(days=1)
     home, away = normalise_team(home), normalise_team(away)
@@ -318,7 +296,7 @@ def run_predict(
     print(f"{home} v {away}")
     print(f"{model}, fitted on {league} matches before {as_of.date()}, xi {xi}")
     print(f"Expected goals: {home} {home_goals:.2f}, {away} {away_goals:.2f}")
-    _print_prices(probabilities, quoted, settings)
+    _print_prices(probabilities.__dict__, quoted, settings)
     return 0
 
 

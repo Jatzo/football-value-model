@@ -2,7 +2,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from valuemodel.odds import edge, find_value, implied_probabilities, overround, remove_margin
+from valuemodel.odds import (
+    check_quotes,
+    edge,
+    find_value,
+    implied_probabilities,
+    overround,
+    remove_margin,
+)
 
 ODDS = np.array([2.0, 3.5, 4.0])
 
@@ -122,3 +129,24 @@ def test_no_value_and_missing_odds_give_no_bets() -> None:
     bets = find_value(probabilities, odds, threshold=0.03)
     assert bets.empty
     assert list(bets.columns) == ["market", "outcome", "probability", "odds", "edge"]
+
+
+def test_check_quotes() -> None:
+    probabilities = {"home": 0.55, "draw": 0.25, "away": 0.20, "over25": 0.5, "under25": 0.5}
+    quoted = {"home": 2.0, "draw": 3.5, "away": 4.0}
+    checks, margins = check_quotes(probabilities, quoted, "proportional", 0.03)
+
+    assert [check.outcome for check in checks] == ["home", "draw", "away"]
+    assert margins == {"1x2": pytest.approx(0.5 + 1 / 3.5 + 0.25 - 1)}
+    home = checks[0]
+    assert home.edge == pytest.approx(0.10)
+    assert home.book_probability == pytest.approx(0.5 / (0.5 + 1 / 3.5 + 0.25))
+    assert home.value
+    assert not any(check.value for check in checks[1:])
+
+
+def test_check_quotes_skips_partly_quoted_markets() -> None:
+    probabilities = {"home": 0.5, "draw": 0.3, "away": 0.2, "over25": 0.6, "under25": 0.4}
+    checks, margins = check_quotes(probabilities, {"over25": 1.9}, "power", 0.03)
+    assert checks == []
+    assert margins == {}

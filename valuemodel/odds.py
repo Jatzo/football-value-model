@@ -4,6 +4,8 @@ Odds arrays have one row per market and one column per outcome, for example
 home, draw and away. A one-dimensional array is treated as a single market.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 
@@ -110,3 +112,46 @@ def find_value(probabilities: pd.DataFrame, odds: pd.DataFrame, threshold: float
         )
     columns = ["market", "outcome", "probability", "odds", "edge"]
     return pd.concat(bets) if bets else pd.DataFrame(columns=columns)
+
+
+@dataclass(frozen=True)
+class QuoteCheck:
+    """One outcome's model probability set against a bookmaker's price."""
+
+    outcome: str
+    probability: float
+    odds: float
+    book_probability: float
+    edge: float
+    value: bool
+
+
+def check_quotes(
+    probabilities: dict[str, float], quoted: dict[str, float], method: str, threshold: float
+) -> tuple[list[QuoteCheck], dict[str, float]]:
+    """Compare model probabilities with quoted odds for every fully quoted market.
+
+    Returns a check for each quoted outcome and the bookmaker's margin on each
+    market. An outcome counts as value only if find_value would bet on it.
+    """
+    model = pd.DataFrame([probabilities])
+    bets = find_value(model, pd.DataFrame([quoted], columns=model.columns), threshold)
+    chosen = set(bets["outcome"])
+    checks, margins = [], {}
+    for market, outcomes in MARKETS.items():
+        if not all(outcome in quoted for outcome in outcomes):
+            continue
+        prices = np.array([quoted[outcome] for outcome in outcomes])
+        margins[market] = float(overround(prices))
+        for outcome, book in zip(outcomes, remove_margin(prices, method), strict=True):
+            checks.append(
+                QuoteCheck(
+                    outcome=outcome,
+                    probability=probabilities[outcome],
+                    odds=quoted[outcome],
+                    book_probability=float(book),
+                    edge=float(edge(probabilities[outcome], quoted[outcome])),
+                    value=outcome in chosen,
+                )
+            )
+    return checks, margins

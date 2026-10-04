@@ -70,6 +70,7 @@ def simulated_cache(clean_environment: pytest.MonkeyPatch) -> pd.DataFrame:
         ignore_index=True,
     )
     clean_environment.setattr(cli, "load_matches", lambda *_: league)
+    clean_environment.setattr(cli, "load_available", lambda *_: league)
     return league
 
 
@@ -124,8 +125,8 @@ def test_predict_with_odds_shows_edges_and_a_paper_bet(
     assert cli.main([*args, "--odds", "50", "50", "50", "--totals-odds", "1.01", "1.01"]) == 0
     out = capsys.readouterr().out
     assert "Book chance" in out
-    assert "Bookmaker margin on the match result" in out
-    assert "Bookmaker margin on over/under 2.5" in out
+    assert "Bookmaker margin, match result" in out
+    assert "Bookmaker margin, over/under 2.5" in out
     assert out.count("value") == 1
     assert "Paper bet:" in out
     assert "of a 1000 unit bankroll (quarter Kelly)" in out
@@ -183,6 +184,7 @@ def simulated_cache_with_odds(clean_environment: pytest.MonkeyPatch, tmp_path: P
     league = add_odds(league, model, rng)
     clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
     clean_environment.setattr(cli, "load_matches", lambda *_: league)
+    clean_environment.setattr(cli, "load_available", lambda *_: league)
     return tmp_path
 
 
