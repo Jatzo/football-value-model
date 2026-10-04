@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Summary{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <h1>Backtest summary</h1>
+  <p class="muted">
+    {{ result.league | league }}, {% for season in result.seasons %}{{ season | season }}{% if not loop.last %}, {% endif %}{% endfor %}.
+    {{ description }}.
+  </p>
+</section>
+
+<section class="cards" aria-label="Dixon-Coles headline figures">
+  {% for card in cards %}
+  <div class="card">
+    <div class="card-label">{{ card.label }}</div>
+    <div class="card-value {{ card.tone }}">{{ card.value }}</div>
+    <div class="card-note">{{ card.note }}</div>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <h2>What this shows</h2>
+  <p>
+    Closing line value compares each price taken with Pinnacle's closing price after its margin is removed.
+    It is the most reliable sign of a real edge, because it is far less noisy than profit.
+    A negative figure means the market moved against the model's selections more often than not:
+    the model is finding prices where it disagrees with the market, and the market tends to be right.
+  </p>
+</section>
+
+<section class="panel">
+  <h2>Bankroll</h2>
+  <div class="chart-box"><canvas id="bankroll-chart" aria-label="Bankroll over time for each strategy" role="img"></canvas></div>
+  <script id="bankroll-data" type="application/json">{{ bankroll | tojson }}</script>
+</section>
+
+<section class="panel">
+  <h2>Strategies</h2>
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Strategy</th><th class="num">Bets</th><th class="num">Mean CLV</th><th class="num">Beat the close</th>
+        <th class="num">Staked</th><th class="num">Profit</th><th class="num">ROI</th>
+        <th class="num">Level-stakes ROI (95% interval)</th><th class="num">Max drawdown</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in result.summary.itertuples() %}
+      <tr>
+        <td>{{ row.strategy | strategy }}</td>
+        <td class="num">{{ row.bets | int }}</td>
+        {% if row.bets %}
+        <td class="num {{ row.mean_clv | tone }}">{{ row.mean_clv | signed }}</td>
+        <td class="num">{{ row.beat_close_share | percent }}</td>
+        <td class="num">{{ row.staked | units }}</td>
+        <td class="num {{ row.profit | tone }}">{{ row.profit | units }}</td>
+        <td class="num {{ row.roi | tone }}">{{ row.roi | signed }}</td>
+        <td class="num">{{ row.level_roi | signed }} ({{ row.level_roi_low | signed }} to {{ row.level_roi_high | signed }})</td>
+        <td class="num">{{ row.max_drawdown_share | percent }}</td>
+        {% else %}
+        <td class="num muted" colspan="7">No bets</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Follow the market treats Pinnacle's pre-match prices, margin removed, as its forecast and bets whenever the chosen bookmaker offers more.</p>
+</section>
+
+<section class="panel">
+  <h2>By season</h2>
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Strategy</th><th>Season</th><th class="num">Bets</th><th class="num">Staked</th><th class="num">Profit</th><th class="num">Mean CLV</th></tr>
+    </thead>
+    <tbody>
+      {% for row in result.season_summary.itertuples() %}
+      <tr>
+        <td>{{ row.strategy | strategy }}</td>
+        <td>{{ row.season | season }}</td>
+        <td class="num">{{ row.bets }}</td>
+        <td class="num">{{ row.staked | units }}</td>
+        <td class="num {{ row.profit | tone }}">{{ row.profit | units }}</td>
+        <td class="num {{ row.mean_clv | tone }}">{{ row.mean_clv | signed }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}{% include "_chart_script.html" %}{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}No backtest yet{% endblock %}
+{% block content %}
+<section class="empty">
+  <h1>No backtest has been run yet</h1>
+  <p>Download the data and run the backtest, then refresh this page.</p>
+  <pre><code>valuemodel download
+valuemodel backtest</code></pre>
+</section>
+{% endblock %}

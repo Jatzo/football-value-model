@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} | Football Value Model</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-row">
+      <a class="brand" href="{{ url_for('pages.summary') }}">Football Value Model</a>
+      <nav>
+        {% set here = request.endpoint %}
+        <a href="{{ url_for('pages.summary', run=run_id) }}" {% if here == 'pages.summary' %}aria-current="page"{% endif %}>Summary</a>
+        <a href="{{ url_for('pages.bets', run=run_id) }}" {% if here == 'pages.bets' %}aria-current="page"{% endif %}>Bets</a>
+        <a href="{{ url_for('pages.models', run=run_id) }}" {% if here == 'pages.models' %}aria-current="page"{% endif %}>Models</a>
+        <a href="{{ url_for('pages.fixtures') }}" {% if here == 'pages.fixtures' %}aria-current="page"{% endif %}>Fixtures</a>
+      </nav>
+      {% if runs and run_id %}
+      <form class="run-picker" method="get">
+        <label for="run">Backtest run</label>
+        <select id="run" name="run" onchange="this.form.submit()">
+          {% for run in runs %}
+          <option value="{{ run.id }}" {% if run.id == run_id %}selected{% endif %}>
+            #{{ run.id }} {{ run.league }}, {{ run.created_at[:10] }}
+          </option>
+          {% endfor %}
+        </select>
+        <noscript><button type="submit">Show</button></noscript>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="wrap site-footer">
+    <p>
+      Paper trading only. This is a statistics project, not betting advice.
+      If gambling is causing you problems, <a href="https://www.begambleaware.org/">BeGambleAware</a> offers free, confidential support.
+    </p>
+    <p>Results and odds from <a href="https://www.football-data.co.uk/">football-data.co.uk</a>.</p>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

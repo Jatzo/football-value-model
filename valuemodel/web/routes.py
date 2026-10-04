@@ -1,0 +1,125 @@
+"""Dashboard pages."""
+
+import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
+
+from flask import Blueprint, Flask, abort, current_app, render_template, request
+
+from valuemodel.backtest import BacktestResult
+from valuemodel.config import BOOKMAKERS, LEAGUES, Settings, season_label
+from valuemodel.report import staking_description
+from valuemodel.store import connect, database_path, latest_run_id, list_runs, load_run
+from valuemodel.web import views
+
+pages = Blueprint("pages", __name__)
+
+
+def register_filters(app: Flask) -> None:
+    app.jinja_env.filters.update(
+        percent=lambda value: "n/a" if views.is_missing(value) else f"{value:.1%}",
+        signed=lambda value: "n/a" if views.is_missing(value) else f"{value:+.1%}",
+        units=lambda value: "n/a" if views.is_missing(value) else f"{value:,.2f}",
+        odds=lambda value: "" if views.is_missing(value) else f"{value:.2f}",
+        tone=lambda value: (
+            ""
+            if views.is_missing(value) or value == 0
+            else ("positive" if value > 0 else "negative")
+        ),
+        season=season_label,
+        strategy=lambda name: views.STRATEGY_NAMES.get(name, name),
+        outcome=lambda name: views.OUTCOME_NAMES.get(name, name),
+        market=lambda name: views.MARKET_NAMES.get(name, name),
+        forecaster=lambda name: views.FORECASTER_NAMES.get(name, name),
+        league=lambda code: LEAGUES.get(code, code),
+    )
+
+
+def _settings() -> Settings:
+    return current_app.config["SETTINGS"]
+
+
+@contextmanager
+def _database() -> Iterator[sqlite3.Connection]:
+    connection = connect(database_path(_settings()))
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
+def _selected_run() -> tuple[BacktestResult | None, int | None, list[dict[str, object]]]:
+    """The run chosen with ?run=, or the latest one, plus every run for the picker."""
+    with _database() as connection:
+        runs = list_runs(connection).to_dict("records")
+        run_id = request.args.get("run", type=int) or latest_run_id(connection)
+        if run_id is None:
+            return None, None, runs
+        try:
+            return load_run(connection, run_id), run_id, runs
+        except KeyError:
+            abort(404)
+
+
+def _render_run_page(template: str, **context: object) -> str:
+    """Render a page for the selected run. Context values that are functions get the run."""
+    result, run_id, runs = _selected_run()
+    if result is None:
+        return render_template("no_runs.html", runs=runs, page=template)
+    settings = result.settings
+    description = (
+        f"Bets at {BOOKMAKERS[settings.bookmaker]} pre-match odds, "
+        f"{staking_description(settings)} capped at {settings.max_stake:.0%}, "
+        f"edge threshold {settings.edge_threshold:.0%}"
+    )
+    return render_template(
+        template,
+        result=result,
+        run_id=run_id,
+        runs=runs,
+        description=description,
+        **{name: build(result) if callable(build) else build for name, build in context.items()},
+    )
+
+
+@pages.route("/")
+def summary() -> str:
+    return _render_run_page(
+        "summary.html",
+        cards=views.headline_cards,
+        bankroll=views.bankroll_series,
+    )
+
+
+@pages.route("/bets")
+def bets() -> str:
+    filters = views.BetFilters.from_args(request.args.to_dict())
+    return _render_run_page(
+        "bets.html",
+        filters=filters,
+        bet_page=lambda result: views.bet_page(result, filters),
+    )
+
+
+@pages.route("/models")
+def models() -> str:
+    return _render_run_page(
+        "models.html",
+        calibration=views.calibration_series,
+        verdict=lambda result: views.scores_verdict(result.scores),
+    )
+
+
+@pages.route("/fixtures")
+def fixtures() -> str:
+    settings = _settings()
+    with _database() as connection:
+        runs = list_runs(connection).to_dict("records")
+    return render_template(
+        "fixtures.html",
+        view=views.fixtures_view(settings),
+        settings=settings,
+        bookmaker=BOOKMAKERS[settings.bookmaker],
+        runs=runs,
+        run_id=None,
+    )

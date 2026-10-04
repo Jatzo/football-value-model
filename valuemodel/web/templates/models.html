@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Models{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <h1>Model quality</h1>
+  <p class="muted">How good the forecasts are, judged separately from betting results.</p>
+</section>
+
+<section class="panel">
+  <h2>Forecasters compared</h2>
+  {% set scores = result.scores %}
+  {% if scores | length %}
+  <p class="muted small">Match result forecasts on the {{ scores.matches.iloc[0] }} matches every forecaster priced. Lower is better for all three scores.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Forecaster</th><th class="num">Log loss</th><th class="num">Ranked probability score</th><th class="num">Brier score</th></tr></thead>
+    <tbody>
+      {% set best = scores.rps.min() %}
+      {% for row in scores.itertuples() %}
+      <tr {% if row.rps == best %}class="best"{% endif %}>
+        <td>{{ row.forecaster | forecaster }}</td>
+        <td class="num">{{ "%.4f" | format(row.log_loss) }}</td>
+        <td class="num">{{ "%.4f" | format(row.rps) }}</td>
+        <td class="num">{{ "%.4f" | format(row.brier) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p>{{ verdict }}</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Calibration</h2>
+  <p class="muted small">
+    Home, draw and away forecasts pooled into bins of 10 percentage points. A perfectly calibrated model sits on the diagonal:
+    outcomes it calls 30% likely happen 30% of the time.
+  </p>
+  <div class="chart-box square"><canvas id="calibration-chart" aria-label="Calibration of model forecasts" role="img"></canvas></div>
+  <script id="calibration-data" type="application/json">{{ calibration | tojson }}</script>
+</section>
+{% endblock %}
+{% block scripts %}{% include "_chart_script.html" %}{% endblock %}

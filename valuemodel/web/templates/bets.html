@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Bets{% endblock %}
+{% block content %}
+{% set log = bet_page %}
+<section class="page-heading">
+  <h1>Bet log</h1>
+  <p class="muted">{{ description }}. Newest bets first.</p>
+</section>
+
+<form class="filters panel" method="get">
+  <input type="hidden" name="run" value="{{ run_id }}">
+  <label>Strategy
+    <select name="strategy">
+      {% for value in log.options.strategy %}
+      <option value="{{ value }}" {% if value == filters.strategy %}selected{% endif %}>{{ value | strategy }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>League
+    <select name="league">
+      <option value="">All</option>
+      {% for value in log.options.league %}
+      <option value="{{ value }}" {% if value == filters.league %}selected{% endif %}>{{ value | league }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Season
+    <select name="season">
+      <option value="">All</option>
+      {% for value in log.options.season %}
+      <option value="{{ value }}" {% if value == filters.season %}selected{% endif %}>{{ value | season }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Market
+    <select name="market">
+      <option value="">All</option>
+      {% for value in log.options.market %}
+      <option value="{{ value }}" {% if value == filters.market %}selected{% endif %}>{{ value | market }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Result
+    <select name="result">
+      <option value="">All</option>
+      <option value="won" {% if filters.result == 'won' %}selected{% endif %}>Won</option>
+      <option value="lost" {% if filters.result == 'lost' %}selected{% endif %}>Lost</option>
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+</form>
+
+<section class="totals" aria-label="Totals for the selected bets">
+  <span><strong>{{ "{:,}".format(log.totals.bets) }}</strong> bets</span>
+  <span><strong>{{ log.totals.won }}</strong> won</span>
+  <span>Staked <strong>{{ log.totals.staked | units }}</strong></span>
+  <span>Profit <strong class="{{ log.totals.profit | tone }}">{{ log.totals.profit | units }}</strong></span>
+  <span>ROI <strong class="{{ log.totals.roi | tone }}">{{ log.totals.roi | signed }}</strong></span>
+  <span>Mean CLV <strong class="{{ log.totals.mean_clv | tone }}">{{ log.totals.mean_clv | signed }}</strong></span>
+</section>
+
+<section class="panel">
+  {% if log.rows | length %}
+  <div class="table-scroll">
+  <table class="bet-log">
+    <thead>
+      <tr>
+        <th>Date</th><th>Match</th><th>Bet</th><th class="num">Model</th><th class="num">Odds</th>
+        <th class="num">Edge</th><th class="num">Stake</th><th class="num">Profit</th><th class="num">Closing odds</th><th class="num">CLV</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for bet in log.rows.itertuples() %}
+      <tr>
+        <td>{{ bet.date.strftime('%d %b %Y') }}</td>
+        <td>{{ bet.home_team }} v {{ bet.away_team }}</td>
+        <td>{{ bet.outcome | outcome }}</td>
+        <td class="num">{{ bet.probability | percent }}</td>
+        <td class="num">{{ bet.odds | odds }}</td>
+        <td class="num">{{ bet.edge | signed }}</td>
+        <td class="num">{{ bet.stake | units }}</td>
+        <td class="num {{ bet.profit | tone }}">{{ bet.profit | units }}</td>
+        <td class="num">{{ bet.fair_closing_odds | odds }}</td>
+        <td class="num {{ bet.clv | tone }}">{{ bet.clv | signed }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">Closing odds are Pinnacle's, with the margin removed. Blank where Pinnacle's price is missing.</p>
+  {% else %}
+  <p class="muted">No bets match these filters.</p>
+  {% endif %}
+</section>
+
+{% if log.pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% set query = request.args.to_dict() %}
+  {% if log.page > 1 %}
+  <a href="{{ url_for('pages.bets', **dict(query, page=log.page - 1)) }}">Newer</a>
+  {% endif %}
+  <span>Page {{ log.page }} of {{ log.pages }}</span>
+  {% if log.page < log.pages %}
+  <a href="{{ url_for('pages.bets', **dict(query, page=log.page + 1)) }}">Older</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Fixtures{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <h1>Upcoming fixtures</h1>
+  <p class="muted">
+    Dixon-Coles fair odds against {{ bookmaker }}'s prices. Value means an edge of at least {{ "%.0f" | format(settings.edge_threshold * 100) }}%.
+    {% if view.fetched %}Fixtures fetched {{ view.fetched.strftime('%d %b %Y at %H:%M') }} UTC.{% endif %}
+  </p>
+</section>
+
+{% if view.status == "missing" %}
+<section class="empty">
+  <h2>No fixtures downloaded yet</h2>
+  <p>Fetch the latest fixtures and this season's results, then refresh this page.</p>
+  <pre><code>valuemodel fixtures</code></pre>
+</section>
+{% elif view.status == "empty" %}
+<section class="empty"><h2>The fixtures file has no matches in it at the moment</h2></section>
+{% elif view.status == "no_history" %}
+<section class="empty">
+  <h2>No fixtures for the leagues with cached results</h2>
+  <p>
+    The current file only covers {{ view.unpriced_leagues | join(", ") }}, and none of them has cached results,
+    so there is nothing the model can price. The file is updated through the week, so check again closer to the next round.
+  </p>
+</section>
+{% else %}
+  {% for league in view.priced_leagues %}
+  <section class="panel">
+    <h2>{{ league | league }}</h2>
+    <p class="muted small">Latest result in the data: {{ view.latest_result.get(league, "none") }}. Results can lag a week or two behind.</p>
+    <div class="table-scroll">
+    <table class="fixtures">
+      <thead>
+        <tr>
+          <th>Kick-off</th><th>Match</th>
+          <th class="num">Home</th><th class="num">Draw</th><th class="num">Away</th>
+          <th class="num">Over 2.5</th><th class="num">Under 2.5</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for game in view.rows[league] %}
+        <tr>
+          <td>{{ game.date.strftime('%a %d %b') }} {{ game.kickoff }}</td>
+          <td>{{ game.home_team }} v {{ game.away_team }}</td>
+          {% for cell in game.cells %}
+          <td class="num price{% if cell.value %} value{% endif %}">
+            <span class="fair" title="Model fair odds">{{ cell.fair_odds | odds }}</span>
+            <span class="offered" title="{{ bookmaker }} odds">{{ cell.offered | odds }}</span>
+            <span class="edge {{ cell.edge | tone }}">{{ cell.edge | signed }}</span>
+          </td>
+          {% else %}
+          <td class="muted small" colspan="5">Not priced: a team has fewer than 10 matches in the training window</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="muted small">Each cell shows the model's fair odds, {{ bookmaker }}'s odds and the edge. Highlighted cells are value bets, at most one per market.</p>
+  </section>
+  {% endfor %}
+  {% if view.unpriced_leagues %}
+  <p class="muted small">Also in the file but not priced, because there are no cached results for them: {{ view.unpriced_leagues | join(", ") }}.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}
