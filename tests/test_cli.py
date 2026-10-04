@@ -290,7 +290,7 @@ def test_picks_lists_value_bets_and_prices_to_beat(
     )
     unpriced = views.ScheduleRow(day, "17:30", "Matchday 6", "Leeds", "Newcomers", False, [], 0, 0)
     clean_environment.setattr(
-        cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok", picks=[pick])
+        cli.views, "fixtures_view", lambda *_: views.FixturesView(status="ok", picks=[pick])
     )
     clean_environment.setattr(
         cli.views,
@@ -316,7 +316,9 @@ def test_picks_lists_value_bets_and_prices_to_beat(
 def test_picks_says_when_nothing_has_value(
     clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clean_environment.setattr(cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok"))
+    clean_environment.setattr(
+        cli.views, "fixtures_view", lambda *_: views.FixturesView(status="ok")
+    )
     clean_environment.setattr(
         cli.views, "schedule_view", lambda *_, **__: views.ScheduleView(rounds=1)
     )
@@ -346,7 +348,7 @@ def test_slips_prints_each_suggested_slip(
         "returns": 40.0,
     }
     clean_environment.setattr(
-        cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok", slips=[slip])
+        cli.views, "fixtures_view", lambda *_: views.FixturesView(status="ok", slips=[slip])
     )
     no_schedule(clean_environment)
     assert cli.main(["slips"]) == 0
@@ -381,7 +383,9 @@ def test_slips_without_odds_offers_the_likeliest_slips(
         "fair_odds": 1.6,
         "price_to_beat": 1.65,
     }
-    clean_environment.setattr(cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok"))
+    clean_environment.setattr(
+        cli.views, "fixtures_view", lambda *_: views.FixturesView(status="ok")
+    )
     no_schedule(clean_environment)
     clean_environment.setattr(cli.views, "likely_slip_cards", lambda *_: [likely])
     assert cli.main(["slips"]) == 0
@@ -399,3 +403,31 @@ def test_slips_needs_the_fixtures_file(
     clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
     assert cli.main(["slips"]) == 1
     assert "Run: valuemodel fixtures" in capsys.readouterr().err
+
+
+def test_slips_pass_the_chosen_size_on(
+    clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen = []
+
+    def fixtures_view(_: object, legs: int) -> views.FixturesView:
+        seen.append(legs)
+        return views.FixturesView(status="ok", picks=[{"outcome": "home"}])
+
+    clean_environment.setattr(cli.views, "fixtures_view", fixtures_view)
+    no_schedule(clean_environment)
+    clean_environment.setattr(
+        cli.views, "likely_slip_cards", lambda *args: seen.append(args[-1]) or []
+    )
+    assert cli.main(["slips", "--legs", "5"]) == 0
+    assert seen == [5, 5]
+    assert (
+        "No value five-fold: too few matches have a value bet for 5 legs."
+        in capsys.readouterr().out
+    )
+
+
+def test_slips_reject_too_many_legs(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["slips", "--legs", "7"])
+    assert "invalid choice" in capsys.readouterr().err
