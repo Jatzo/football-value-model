@@ -6,7 +6,9 @@ A Dixon-Coles model that prices football matches, compares its prices with bookm
 
 ## Status
 
-Work in progress. The data pipeline, both models, and odds comparison with paper staking are in place. The backtest and the dashboard come next, and this README will report the backtest results, good or bad, once they exist.
+Work in progress. The data pipeline, both models, paper staking and the backtest are in place. The dashboard comes next.
+
+The short version of the results: the model does not beat the market. Over three Premier League seasons its bets were struck at prices worse than where the market closed, and they lost money. The details are below.
 
 ## Quick start
 
@@ -38,6 +40,14 @@ Add a bookmaker's decimal odds to see the edge on each outcome and the paper sta
 ```bash
 valuemodel predict --home Arsenal --away Chelsea --odds 1.70 3.90 5.25 --totals-odds 1.95 1.95
 ```
+
+To run the backtest and print the report below:
+
+```bash
+valuemodel backtest
+```
+
+Each run is also saved to `data/valuemodel.sqlite`. Add `--no-save` to skip that.
 
 ## How the model works
 
@@ -80,6 +90,53 @@ A bet has value when `model probability * odds - 1` is at least the edge thresho
 
 Stakes are paper only. The default is quarter Kelly: a quarter of the stake the Kelly criterion recommends, because full Kelly assumes the model's probabilities are exactly right. Flat staking is the alternative. Either way, no single bet can exceed 2% of the current bankroll, and nothing is staked without a positive edge.
 
+## Backtest
+
+### Method
+
+The backtest walks through 2023/24, 2024/25 and 2025/26 in date order. Before each round of matches the model is refitted using only results that were already known when the bookmaker's odds were collected. The data source collects pre-match odds on Friday afternoon for games from Friday to Monday, and on Tuesday afternoon for games from Tuesday to Thursday. So a Sunday match is priced from results up to the Thursday before it, never from Saturday's games. A test rewrites every result after a cutoff date and checks that no forecast made before the cutoff changes.
+
+Bets are struck at Bet365's pre-match price whenever the edge reaches 3%, at most one bet per market per match, with quarter Kelly stakes capped at 2% of the bankroll. All stakes on one day are sized from that morning's bankroll. Games involving a team with fewer than 10 matches in the training window are skipped. None of these seasons was used to choose `xi`.
+
+Three strategies are compared: Dixon-Coles, the Poisson baseline, and simply following the market. The market strategy treats Pinnacle's pre-match prices, with the margin removed, as its forecast, and bets whenever Bet365 offers at least 3% more.
+
+### Closing line value
+
+Closing line value (CLV) compares the price taken with Pinnacle's closing price after its margin is removed. Pinnacle's closing line is widely treated as the most accurate price available, so a bettor with a real edge should usually beat it. CLV is far less noisy than profit, which makes it the most honest single measure here. It is a benchmark only: closing odds never decide a bet or its stake.
+
+| Strategy | Bets | Bets with closing odds | Mean CLV | Beat the close |
+| --- | --- | --- | --- | --- |
+| Dixon-Coles | 1,413 | 1,205 | -6.4% | 19.8% |
+| Poisson | 1,428 | 1,212 | -6.5% | 19.6% |
+| Market | 7 | 7 | -4.4% | 57.1% |
+
+For context, backing every Bet365 price in these seasons without any model at all gives a mean CLV of between -4.9% and -8.6%, depending on the outcome. The model's selections are no better than that. It is finding prices where it disagrees with the market, and the market turns out to be right more often than not.
+
+Pinnacle's odds are missing from 17 January 2026 onwards, which is why about 15% of bets have no closing price to compare with.
+
+### Betting results
+
+| Strategy | Bets | Staked | Profit | ROI | Max drawdown | Level-stakes ROI (95% interval) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Dixon-Coles | 1,413 | 9,166 | -877 | -9.6% | 91% | -8.3% (-15.4% to -1.0%) |
+| Poisson | 1,428 | 9,086 | -877 | -9.6% | 92% | -10.1% (-17.1% to -3.0%) |
+| Market | 7 | 21 | +17 | +79.3% | 1% | +125% (-43% to +350%) |
+
+Starting from 1,000 units, both models finished with about 123. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets, and for both models it sits entirely below zero. The market strategy found only seven bets, too few to mean anything, which is itself a sign of how rarely Bet365 is 3% more generous than Pinnacle.
+
+### Model quality
+
+Scored on the 940 matches that every forecaster priced. Lower is better for all three scores.
+
+| Forecaster | Log loss | Ranked probability score | Brier |
+| --- | --- | --- | --- |
+| Dixon-Coles | 0.9617 | 0.1966 | 0.5708 |
+| Poisson | 0.9622 | 0.1967 | 0.5711 |
+| Bet365 pre-match, margin removed | 0.9480 | 0.1923 | 0.5623 |
+| Pinnacle closing, margin removed | 0.9429 | 0.1907 | 0.5582 |
+
+The models are well calibrated: when Dixon-Coles gives an outcome a 25% chance, it happens about 26% of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses.
+
 ## Configuration
 
 Settings come from environment variables. Copy `.env.example` to `.env` to change them.
@@ -109,6 +166,8 @@ A few things about the data shape what the model can honestly claim:
 - Most of 2020/21 and the end of 2019/20 were played without crowds, and home advantage almost disappeared. Those seasons are only used as training history, and time decay gives them little weight by the time any forecast is scored.
 
 ## Limitations
+
+A backtest is not real betting. Prices in the data are a snapshot from one moment and may not have been available for the stake suggested. Bookmakers limit accounts that win, and the gap between a backtest and real results is usually unfavourable. Here the backtest already loses, so this mostly matters as a warning against reading too much into the market strategy's seven bets.
 
 Newly promoted teams arrive with no recent Premier League results, so their strengths cannot be estimated well. A team with fewer than 10 matches in the training window is flagged, its games are not priced, and the backtest will not bet on them. For a side with no Premier League matches in the last three years, that means its first 10 games of the season are skipped.
 
