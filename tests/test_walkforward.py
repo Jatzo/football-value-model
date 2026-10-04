@@ -86,3 +86,31 @@ def test_future_results_cannot_leak_into_forecasts(league: pd.DataFrame) -> None
     )
     later = honest.loc[~made_by_cutoff, "home"] - leaked.loc[~made_by_cutoff, "home"]
     assert later.abs().max() > 0.01
+
+
+def test_forecasts_are_fitted_at_the_odds_capture_date(league: pd.DataFrame) -> None:
+    forecasts = walk_forward_forecasts(league, ["2324"], fit_dixon_coles, 0.003)
+    pd.testing.assert_series_equal(
+        forecasts["as_of"], odds_capture_date(forecasts["date"]), check_names=False
+    )
+
+
+def test_saturday_results_do_not_reach_sunday_forecasts(league: pd.DataFrame) -> None:
+    """Odds for a Sunday match are taken on Friday, so Saturday's games must not count."""
+    target = league[league["season"] == "2324"]
+    sunday = target.loc[target["date"].dt.dayofweek == 6, "date"].iloc[2]
+    saturday = sunday - pd.Timedelta(days=1)
+    assert (league["date"] == saturday).any()
+
+    tampered = league.copy()
+    on_saturday = tampered["date"] == saturday
+    tampered.loc[on_saturday, ["home_goals", "away_goals", "result"]] = [9, 0, "H"]
+
+    honest = walk_forward_forecasts(league, ["2324"], fit_dixon_coles, 0.003)
+    leaked = walk_forward_forecasts(tampered, ["2324"], fit_dixon_coles, 0.003)
+    on_sunday = honest["date"] == sunday
+    pd.testing.assert_frame_equal(
+        honest.loc[on_sunday, list(OUTCOMES)], leaked.loc[on_sunday, list(OUTCOMES)]
+    )
+    next_week = honest["date"] > sunday + pd.Timedelta(days=4)
+    assert (honest.loc[next_week, "home"] - leaked.loc[next_week, "home"]).abs().max() > 0.001
