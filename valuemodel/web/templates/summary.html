@@ -70,6 +70,31 @@
 </section>
 
 <section class="panel">
+  <h2>Bets by the model's chance of winning</h2>
+  <p class="muted small">The bets each model was surest about win most often, but at short odds. A band only makes money when its bets win more often than the odds imply, so compare Won with Average.</p>
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Strategy</th><th>Model chance</th><th class="num">Bets</th><th class="num">Average</th><th class="num">Won</th><th class="num">Mean odds</th><th class="num">Level-stakes ROI</th></tr>
+    </thead>
+    <tbody>
+      {% for band in bands %}
+      <tr>
+        <td>{{ band.strategy | strategy }}</td>
+        <td>{{ band.band_low | share }} to {{ band.band_high | share }}</td>
+        <td class="num">{{ band.bets }}</td>
+        <td class="num">{{ band.mean_probability | percent }}</td>
+        <td class="num">{{ band.win_rate | percent }}</td>
+        <td class="num">{{ band.mean_odds | odds }}</td>
+        <td class="num {{ band.level_roi | tone }}">{{ band.level_roi | signed }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
   <h2>By season</h2>
   <div class="table-scroll">
   <table>

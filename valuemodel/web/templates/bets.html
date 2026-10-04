@@ -4,7 +4,7 @@
 {% set log = bet_page %}
 <section class="page-heading">
   <h1>Bet log</h1>
-  <p class="muted">{{ description }}. Newest bets first.</p>
+  <p class="muted">{{ description }}.</p>
 </section>
 
 <form class="filters panel" method="get">
@@ -45,6 +45,12 @@
       <option value="">All</option>
       <option value="won" {% if filters.result == 'won' %}selected{% endif %}>Won</option>
       <option value="lost" {% if filters.result == 'lost' %}selected{% endif %}>Lost</option>
+    </select>
+  </label>
+  <label>Order
+    <select name="sort">
+      <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest first</option>
+      <option value="probability" {% if filters.sort == 'probability' %}selected{% endif %}>Highest model chance</option>
     </select>
   </label>
   <button type="submit">Filter</button>

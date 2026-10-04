@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from valuemodel.backtest import MAIN_MODEL, MODELS, BacktestResult
+from valuemodel.backtest import MAIN_MODEL, MODELS, BacktestResult, probability_bands
 from valuemodel.config import DEFAULT_SEASONS, DEFAULT_XI, LEAGUES, Settings, current_season
 from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
@@ -179,6 +179,7 @@ class BetFilters:
     season: str = ""
     market: str = ""
     result: str = ""
+    sort: str = "newest"
     page: int = 1
 
     @classmethod
@@ -193,6 +194,7 @@ class BetFilters:
             season=args.get("season", ""),
             market=args.get("market", ""),
             result=args.get("result", ""),
+            sort="probability" if args.get("sort") == "probability" else "newest",
             page=page,
         )
 
@@ -233,7 +235,10 @@ def bet_page(result: BacktestResult, filters: BetFilters) -> BetPage:
     }
     pages = max(1, math.ceil(len(chosen) / PER_PAGE))
     page = min(filters.page, pages)
-    ordered = chosen.iloc[::-1] if len(chosen) else chosen
+    if filters.sort == "probability" and len(chosen):
+        ordered = chosen.sort_values("probability", ascending=False, kind="stable")
+    else:
+        ordered = chosen.iloc[::-1] if len(chosen) else chosen
     rows = ordered.iloc[(page - 1) * PER_PAGE : page * PER_PAGE]
     options = {
         "strategy": list(result.bets),
@@ -250,6 +255,7 @@ class PriceCell:
     offered: float
     edge: float
     value: bool
+    likely: bool = False
 
 
 @dataclass
@@ -268,6 +274,7 @@ def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
     for fixture in priced[priced["league"] == league].to_dict("records"):
         cells = []
         if fixture["reliable"]:
+            likeliest = max(MARKETS["1x2"], key=lambda outcome: fixture[outcome])
             for market, outcomes in MARKETS.items():
                 for outcome in outcomes:
                     cells.append(
@@ -276,6 +283,7 @@ def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
                             offered=fixture[f"odds_{outcome}"],
                             edge=fixture[f"edge_{outcome}"],
                             value=fixture[f"value_{market}"] == outcome,
+                            likely=outcome == likeliest,
                         )
                     )
         kickoff = fixture["kickoff"]
@@ -293,6 +301,55 @@ def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
 
 
 @dataclass
+class LikelyOutcome:
+    date: pd.Timestamp
+    league: str
+    home_team: str
+    away_team: str
+    outcome: str
+    probability: float
+    offered: float
+    edge: float
+
+
+def likely_outcomes(priced: pd.DataFrame) -> list[LikelyOutcome]:
+    """Each priced fixture's most likely match result, the likeliest first.
+
+    This is the model's view of what will probably happen, not a list of bets:
+    a likely outcome is usually a short price, and only pays over time when the
+    odds offered beat the probability.
+    """
+    likely = []
+    for fixture in priced[priced["reliable"]].to_dict("records"):
+        outcome = max(MARKETS["1x2"], key=lambda name: fixture[name])
+        likely.append(
+            LikelyOutcome(
+                date=fixture["date"],
+                league=fixture["league"],
+                home_team=fixture["home_team"],
+                away_team=fixture["away_team"],
+                outcome=outcome,
+                probability=fixture[outcome],
+                offered=fixture[f"odds_{outcome}"],
+                edge=fixture[f"edge_{outcome}"],
+            )
+        )
+    return sorted(likely, key=lambda item: item.probability, reverse=True)
+
+
+def probability_band_rows(result: BacktestResult) -> list[dict[str, object]]:
+    """How each model's bets fared, grouped by its chance of them winning."""
+    rows = []
+    for strategy in MODELS:
+        bets = result.bets.get(strategy)
+        if bets is None or bets.empty:
+            continue
+        for band in probability_bands(bets).to_dict("records"):
+            rows.append({"strategy": strategy, **band})
+    return rows
+
+
+@dataclass
 class FixturesView:
     status: str
     fetched: datetime | None = None
@@ -300,6 +357,7 @@ class FixturesView:
     priced_leagues: list[str] = field(default_factory=list)
     unpriced_leagues: dict[str, str] = field(default_factory=dict)
     has_odds: bool = True
+    likely: list[LikelyOutcome] = field(default_factory=list)
     latest_result: dict[str, str] = field(default_factory=dict)
 
 
@@ -330,5 +388,6 @@ def fixtures_view(settings: Settings) -> FixturesView:
         priced_leagues=priced.priced_leagues,
         unpriced_leagues=priced.unpriced_leagues,
         has_odds=bool(priced.fixtures.filter(like="odds_").notna().any().any()),
+        likely=likely_outcomes(priced.fixtures),
         latest_result=latest,
     )

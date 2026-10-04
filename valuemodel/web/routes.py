@@ -97,6 +97,7 @@ def summary() -> str:
         "summary.html",
         cards=views.headline_cards,
         explanation=views.clv_explanation,
+        bands=views.probability_band_rows,
         bankroll=views.bankroll_series,
     )
 

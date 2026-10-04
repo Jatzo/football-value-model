@@ -256,3 +256,48 @@ def test_clv_explanation_follows_the_sign(result: BacktestResult) -> None:
     assert "positive" in views.clv_explanation(
         BacktestResult(**{**result.__dict__, "summary": positive})
     )
+
+
+def test_bets_can_be_ordered_by_model_chance(client: FlaskClient, result: BacktestResult) -> None:
+    page = views.bet_page(result, views.BetFilters(sort="probability"))
+    probabilities = list(page.rows["probability"])
+    assert probabilities == sorted(probabilities, reverse=True)
+    assert probabilities[0] == result.bets["dixon-coles"]["probability"].max()
+    html = client.get("/bets?sort=probability").get_data(as_text=True)
+    assert 'value="probability" selected' in html
+    assert views.BetFilters.from_args({"sort": "nonsense"}).sort == "newest"
+
+
+def test_summary_shows_bets_by_model_chance(client: FlaskClient, result: BacktestResult) -> None:
+    rows = views.probability_band_rows(result)
+    assert {row["strategy"] for row in rows} <= set(result.bets)
+    assert sum(row["bets"] for row in rows if row["strategy"] == "dixon-coles") == len(
+        result.bets["dixon-coles"]
+    )
+    assert "Bets by the model's chance of winning" in client.get("/").get_data(as_text=True)
+
+
+def test_most_likely_outcomes_are_sorted_and_marked() -> None:
+    priced = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-10-10"] * 3),
+            "kickoff": ["15:00"] * 3,
+            "league": ["E0"] * 3,
+            "home_team": ["A", "C", "E"],
+            "away_team": ["B", "D", "F"],
+            "reliable": [True, True, False],
+            "home": [0.30, 0.70, np.nan],
+            "draw": [0.25, 0.20, np.nan],
+            "away": [0.45, 0.10, np.nan],
+            "over25": [0.5, 0.6, np.nan],
+            "under25": [0.5, 0.4, np.nan],
+            **{f"odds_{o}": [2.0] * 3 for o in ("home", "draw", "away", "over25", "under25")},
+            **{f"edge_{o}": [0.0] * 3 for o in ("home", "draw", "away", "over25", "under25")},
+            "value_1x2": [None] * 3,
+            "value_totals": [None] * 3,
+        }
+    )
+    likely = views.likely_outcomes(priced)
+    assert [(item.home_team, item.outcome) for item in likely] == [("C", "home"), ("A", "away")]
+    first_row = views.fixture_rows(priced, "E0")[0]
+    assert [cell.likely for cell in first_row.cells] == [False, False, True, False, False]

@@ -29,6 +29,29 @@
   {% if not view.has_odds %}
   <p class="panel">The fixtures file has no {{ bookmaker }} prices, so only the model's fair odds are shown. The data source does not publish Pinnacle odds for upcoming matches.</p>
   {% endif %}
+  {% if view.likely %}
+  <section class="panel">
+    <h2>Most likely outcomes</h2>
+    <p class="muted small">Each match's most likely result in the model's view, likeliest first. This is not a list of bets: likely results come at short odds and only pay over time when the odds beat the chance, which the edge column shows. In the backtest, the bets the model was surest about did not do better.</p>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Kick-off</th><th>Match</th><th>Most likely</th><th class="num">Chance</th><th class="num">{{ bookmaker }} odds</th><th class="num">Edge</th></tr></thead>
+      <tbody>
+        {% for item in view.likely %}
+        <tr>
+          <td>{{ item.date.strftime('%a %d %b') }}</td>
+          <td>{{ item.home_team }} v {{ item.away_team }}</td>
+          <td>{{ item.outcome | outcome }}</td>
+          <td class="num">{{ item.probability | percent }}</td>
+          <td class="num">{{ item.offered | odds }}</td>
+          <td class="num {{ item.edge | tone }}">{{ item.edge | signed }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endif %}
   {% for league in view.priced_leagues %}
   <section class="panel">
     <h2>{{ league | league }}</h2>
@@ -48,7 +71,7 @@
           <td>{{ game.date.strftime('%a %d %b') }} {{ game.kickoff }}</td>
           <td>{{ game.home_team }} v {{ game.away_team }}</td>
           {% for cell in game.cells %}
-          <td class="num price{% if cell.value %} value{% endif %}">
+          <td class="num price{% if cell.value %} value{% endif %}{% if cell.likely %} likely{% endif %}">
             <span class="fair" title="Model fair odds">{{ cell.fair_odds | odds }}</span>
             <span class="offered" title="{{ bookmaker }} odds">{{ cell.offered | odds }}</span>
             <span class="edge {{ cell.edge | tone }}">{{ cell.edge | signed }}</span>
@@ -61,7 +84,7 @@
       </tbody>
     </table>
     </div>
-    <p class="muted small">Each cell shows the model's fair odds, {{ bookmaker }}'s odds and the edge. Highlighted cells are value bets, at most one per market.</p>
+    <p class="muted small">Each cell shows the model's fair odds, {{ bookmaker }}'s odds and the edge. Shaded cells are value bets, at most one per market. Underlined cells are each match's most likely result.</p>
   </section>
   {% endfor %}
   {% if view.unpriced_leagues %}
