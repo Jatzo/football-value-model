@@ -113,6 +113,12 @@ def season_code(start_year: int) -> str:
     return f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
 
 
+def season_label(code: str) -> str:
+    """Readable form of a season code, for example "2425" gives "2024/25"."""
+    century = 1900 if int(code[:2]) >= 50 else 2000
+    return f"{century + int(code[:2])}/{code[2:]}"
+
+
 def validate_season(code: str) -> str:
     """Check a season code has two consecutive two-digit years and return it."""
     if not _SEASON_PATTERN.match(code):

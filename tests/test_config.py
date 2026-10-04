@@ -6,6 +6,7 @@ from valuemodel.config import (
     Settings,
     load_settings,
     season_code,
+    season_label,
     validate_league,
     validate_season,
 )
@@ -84,3 +85,10 @@ def test_bad_settings_are_rejected(
     clean_environment.setenv(name, value)
     with pytest.raises(ValueError, match=message):
         load_settings()
+
+
+@pytest.mark.parametrize(
+    ("code", "label"), [("2425", "2024/25"), ("9900", "1999/00"), ("0506", "2005/06")]
+)
+def test_season_label(code: str, label: str) -> None:
+    assert season_label(code) == label
