@@ -1,0 +1,97 @@
+import numpy as np
+import pandas as pd
+import pytest
+from simulation import simulate_league, true_model
+
+from valuemodel.models.dixon_coles import fit_dixon_coles
+from valuemodel.models.poisson import fit_poisson
+from valuemodel.walkforward import (
+    FORECAST_COLUMNS,
+    odds_capture_date,
+    walk_forward_forecasts,
+    week_start,
+)
+
+
+@pytest.fixture(scope="module")
+def league() -> pd.DataFrame:
+    rng = np.random.default_rng(11)
+    model = true_model(10, -0.1, rng)
+    return pd.concat(
+        [
+            simulate_league(model, 2, rng, start="2022-08-01", season="2223"),
+            simulate_league(model, 2, rng, start="2023-08-01", season="2324"),
+        ],
+        ignore_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("match_day", "capture_day"),
+    [
+        ("2024-03-01", "2024-03-01"),
+        ("2024-03-02", "2024-03-01"),
+        ("2024-03-03", "2024-03-01"),
+        ("2024-03-04", "2024-03-01"),
+        ("2024-03-05", "2024-03-05"),
+        ("2024-03-06", "2024-03-05"),
+        ("2024-03-07", "2024-03-05"),
+    ],
+    ids=["friday", "saturday", "sunday", "monday", "tuesday", "wednesday", "thursday"],
+)
+def test_odds_capture_date(match_day: str, capture_day: str) -> None:
+    captured = odds_capture_date(pd.Series([pd.Timestamp(match_day)]))
+    assert captured.iloc[0] == pd.Timestamp(capture_day)
+
+
+def test_week_start_is_monday() -> None:
+    starts = week_start(pd.Series(pd.to_datetime(["2024-03-03", "2024-03-04", "2024-03-07"])))
+    assert list(starts) == list(pd.to_datetime(["2024-02-26", "2024-03-04", "2024-03-04"]))
+
+
+def test_forecasts_keep_the_match_index_and_cover_both_markets(league: pd.DataFrame) -> None:
+    forecasts = walk_forward_forecasts(
+        league, ["2324"], fit_poisson, 0.003, odds_capture_date, min_matches=0
+    )
+    target = league[league["season"] == "2324"]
+    assert list(forecasts.index) == list(target.index)
+    assert (forecasts["home_team"] == target["home_team"]).all()
+    np.testing.assert_allclose(forecasts[["home", "draw", "away"]].sum(axis=1), 1.0)
+    np.testing.assert_allclose(forecasts[["over25", "under25"]].sum(axis=1), 1.0)
+    assert (forecasts["as_of"] <= forecasts["date"]).all()
+
+
+def test_unreliable_matches_have_no_prices(league: pd.DataFrame) -> None:
+    forecasts = walk_forward_forecasts(
+        league, ["2324"], fit_poisson, 0.003, odds_capture_date, min_matches=10_000
+    )
+    assert not forecasts["reliable"].any()
+    assert forecasts[list(FORECAST_COLUMNS)].isna().all().all()
+
+
+def test_future_results_cannot_leak_into_forecasts(league: pd.DataFrame) -> None:
+    """Rewrite every result from a cutoff onwards and check earlier forecasts do not move.
+
+    A forecast is made on its as_of date, so it may only use matches played
+    before that date. If any fit could see a match on or after its as_of date,
+    the rewritten scores would change some forecast made at or before the cutoff.
+    """
+    target = league[league["season"] == "2324"]
+    cutoff = target["date"].iloc[len(target) // 2]
+    tampered = league.copy()
+    future = tampered["date"] >= cutoff
+    tampered.loc[future, "home_goals"] = 7
+    tampered.loc[future, "away_goals"] = 0
+    tampered.loc[future, "result"] = "H"
+
+    honest = walk_forward_forecasts(league, ["2324"], fit_dixon_coles, 0.003, odds_capture_date)
+    leaked = walk_forward_forecasts(tampered, ["2324"], fit_dixon_coles, 0.003, odds_capture_date)
+
+    made_by_cutoff = honest["as_of"] <= cutoff
+    assert made_by_cutoff.sum() > 50
+    pd.testing.assert_frame_equal(
+        honest.loc[made_by_cutoff, list(FORECAST_COLUMNS)],
+        leaked.loc[made_by_cutoff, list(FORECAST_COLUMNS)],
+    )
+    later = honest.loc[~made_by_cutoff, "home"] - leaked.loc[~made_by_cutoff, "home"]
+    assert later.abs().max() > 0.01

@@ -5,7 +5,8 @@ from simulation import simulate_league, true_model
 
 from valuemodel.models.common import FittedModel
 from valuemodel.models.poisson import fit_poisson
-from valuemodel.tuning import evaluate_xi, walk_forward_forecasts
+from valuemodel.tuning import evaluate_xi
+from valuemodel.walkforward import walk_forward_forecasts
 
 
 def drifting_league(seed: int) -> pd.DataFrame:
