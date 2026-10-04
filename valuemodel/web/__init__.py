@@ -1,7 +1,8 @@
 """Flask dashboard for backtest results and upcoming fixtures.
 
-Run with `flask --app valuemodel.web run`. The dashboard only reads the local
-database and cached files, so it never contacts the data source itself.
+Run with `flask --app valuemodel.web run`. The dashboard works from the local
+database and cached files and never contacts the data source itself. The
+database is created empty on the first visit if no backtest has been saved.
 """
 
 from flask import Flask
