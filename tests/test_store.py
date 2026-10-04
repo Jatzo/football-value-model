@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -84,3 +85,28 @@ def test_old_runs_load_after_settings_change(tmp_path: Path, result: BacktestRes
             (run_id,),
         )
     assert load_run(connection, run_id).settings == result.settings
+
+
+def test_a_failed_save_leaves_no_partial_run(tmp_path: Path, result: BacktestResult) -> None:
+    broken = BacktestResult(
+        **{
+            **result.__dict__,
+            "calibration": {"dixon-coles": result.calibration["dixon-coles"].assign(extra=1)},
+        }
+    )
+    connection = connect(tmp_path / "runs.sqlite")
+    with pytest.raises(sqlite3.Error):
+        save_run(connection, broken)
+    for table in ("runs", "bets", "summaries", "season_summaries", "scores", "calibration"):
+        assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+
+
+def test_scores_that_could_not_be_computed_are_saved_as_missing(
+    tmp_path: Path, result: BacktestResult
+) -> None:
+    unscored = BacktestResult(
+        **{**result.__dict__, "scores": result.scores.assign(matches=0, log_loss=float("nan"))}
+    )
+    connection = connect(tmp_path / "runs.sqlite")
+    loaded = load_run(connection, save_run(connection, unscored))
+    assert loaded.scores["log_loss"].isna().all()

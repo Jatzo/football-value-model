@@ -61,9 +61,9 @@ CREATE TABLE IF NOT EXISTS scores (
     run_id INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE,
     forecaster TEXT NOT NULL,
     matches INTEGER NOT NULL,
-    log_loss REAL NOT NULL,
-    rps REAL NOT NULL,
-    brier REAL NOT NULL
+    log_loss REAL,
+    rps REAL,
+    brier REAL
 );
 CREATE TABLE IF NOT EXISTS calibration (
     run_id INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE,
@@ -128,12 +128,25 @@ def _settings_from_json(text: str) -> Settings:
 
 
 def _append(connection: sqlite3.Connection, table: str, frame: pd.DataFrame, run_id: int) -> None:
-    if not frame.empty:
-        frame.assign(run_id=run_id).to_sql(table, connection, if_exists="append", index=False)
+    """Insert a frame's rows on the open transaction, with missing values stored as NULL.
+
+    Plain executemany is used rather than DataFrame.to_sql, which commits on its
+    own and so would leave half a run behind if a later insert failed.
+    """
+    if frame.empty:
+        return
+    frame = frame.assign(run_id=run_id)
+    columns = ", ".join(f'"{name}"' for name in frame.columns)
+    placeholders = ", ".join("?" for _ in frame.columns)
+    rows = frame.astype(object).where(frame.notna(), None).to_numpy().tolist()
+    connection.executemany(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", rows)
 
 
 def save_run(connection: sqlite3.Connection, result: BacktestResult) -> int:
-    """Store a whole backtest in one transaction and return its run id."""
+    """Store a whole backtest in one transaction and return its run id.
+
+    If any insert fails the transaction is rolled back, so no partial run is left.
+    """
     with connection:
         cursor = connection.execute(
             "INSERT INTO runs (created_at, league, seasons, xi, settings) VALUES (?, ?, ?, ?, ?)",

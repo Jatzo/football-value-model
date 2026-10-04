@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import sqlite3
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -364,6 +365,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     try:
         return commands[args.command]()
-    except (FileNotFoundError, ValueError, RuntimeError) as error:
+    except (FileNotFoundError, ValueError, RuntimeError, sqlite3.Error) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
