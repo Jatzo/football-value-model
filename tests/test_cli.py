@@ -1,10 +1,9 @@
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 from conftest import FakeSource
-from simulation import add_odds, simulate_league, true_model
+from simulation import simulated_seasons
 
 from valuemodel import cli
 
@@ -64,13 +63,8 @@ def test_bad_arguments_are_rejected(
 @pytest.fixture
 def simulated_cache(clean_environment: pytest.MonkeyPatch) -> pd.DataFrame:
     """Replace the cached files with a simulated league covering history and tuning seasons."""
-    rng = np.random.default_rng(5)
-    model = true_model(10, -0.1, rng)
     seasons = [("2021", "2020-08-01"), ("2122", "2021-08-01"), ("2223", "2022-08-01")]
-    league = pd.concat(
-        [simulate_league(model, 2, rng, start=start, season=code) for code, start in seasons],
-        ignore_index=True,
-    )
+    league = simulated_seasons(5, 10, 2, seasons=seasons, with_odds=False)
     clean_environment.setattr(cli, "load_matches", lambda *_: league)
     clean_environment.setattr(cli, "load_available", lambda *_: league)
     return league
@@ -183,14 +177,7 @@ def test_bad_setting_is_reported(
 
 @pytest.fixture
 def simulated_cache_with_odds(clean_environment: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    rng = np.random.default_rng(6)
-    model = true_model(8, -0.1, rng)
-    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
-    league = pd.concat(
-        [simulate_league(model, 2, rng, start=start, season=code) for code, start in seasons],
-        ignore_index=True,
-    )
-    league = add_odds(league, model, rng)
+    league = simulated_seasons(6, 8, 2)
     clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
     clean_environment.setattr(cli, "load_matches", lambda *_: league)
     clean_environment.setattr(cli, "load_available", lambda *_: league)

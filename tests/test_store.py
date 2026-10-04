@@ -1,9 +1,8 @@
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
-from simulation import add_odds, simulate_league, true_model
+from simulation import simulated_seasons
 
 from valuemodel.backtest import BacktestResult, run_backtest
 from valuemodel.config import Settings
@@ -19,15 +18,9 @@ from valuemodel.store import (
 
 @pytest.fixture(scope="module")
 def result() -> BacktestResult:
-    rng = np.random.default_rng(4)
-    model = true_model(8, -0.1, rng)
-    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
-    league = pd.concat(
-        [simulate_league(model, 2, rng, start=start, season=code) for code, start in seasons],
-        ignore_index=True,
-    )
+    league = simulated_seasons(4, 8, 2)
     settings = Settings(data_dir=Path("somewhere"), edge_threshold=0.02)
-    return run_backtest(add_odds(league, model, rng), "E0", ["2324"], settings, min_matches=0)
+    return run_backtest(league, "E0", ["2324"], settings, min_matches=0)
 
 
 def test_database_lives_in_the_data_directory(tmp_path: Path) -> None:

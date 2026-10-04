@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
-from simulation import add_odds, simulate_league, true_model
+from simulation import simulated_seasons
 
 from valuemodel.backtest import (
     BET_COLUMNS,
@@ -242,14 +242,8 @@ def test_calibration_table_pools_all_three_outcomes(two_days: pd.DataFrame) -> N
 
 @pytest.fixture(scope="module")
 def simulated_league() -> pd.DataFrame:
-    rng = np.random.default_rng(21)
-    model = true_model(10, -0.1, rng)
-    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
-    league = pd.concat(
-        [simulate_league(model, 2, rng, start=start, season=code) for code, start in seasons],
-        ignore_index=True,
-    )
-    return add_odds(league, model, rng)
+    league = simulated_seasons(21, 10, 2)
+    return league
 
 
 def test_run_backtest_end_to_end(simulated_league: pd.DataFrame) -> None:

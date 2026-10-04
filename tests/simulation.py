@@ -1,5 +1,7 @@
 """Simulated leagues with known parameters, for checking that fits recover them."""
 
+from collections.abc import Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -76,3 +78,23 @@ def add_odds(frame: pd.DataFrame, model: FittedModel, rng: np.random.Generator) 
             wobble = rng.lognormal(0, noise, len(frame))
             frame[f"{source}_{outcome}"] = np.maximum(1.01, wobble / (true[outcome] * (1 + margin)))
     return frame
+
+
+TWO_SEASONS: tuple[tuple[str, str], ...] = (("2223", "2022-08-01"), ("2324", "2023-08-01"))
+
+
+def simulated_seasons(
+    seed: int,
+    n_teams: int,
+    rounds: int,
+    seasons: Sequence[tuple[str, str]] = TWO_SEASONS,
+    with_odds: bool = True,
+) -> pd.DataFrame:
+    """Consecutive simulated seasons, given as (code, start date), from one true model."""
+    rng = np.random.default_rng(seed)
+    model = true_model(n_teams, -0.1, rng)
+    league = pd.concat(
+        [simulate_league(model, rounds, rng, start=start, season=code) for code, start in seasons],
+        ignore_index=True,
+    )
+    return add_odds(league, model, rng) if with_odds else league

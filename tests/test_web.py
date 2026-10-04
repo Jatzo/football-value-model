@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from flask.testing import FlaskClient
-from simulation import add_odds, simulate_league, true_model
+from simulation import simulate_league, simulated_seasons, true_model
 
 from valuemodel.backtest import BacktestResult, run_backtest
 from valuemodel.config import Settings
@@ -16,27 +16,15 @@ from valuemodel.web import create_app, views
 
 @pytest.fixture(scope="module")
 def result() -> BacktestResult:
-    rng = np.random.default_rng(17)
-    model = true_model(10, -0.1, rng)
-    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
-    league = pd.concat(
-        [simulate_league(model, 3, rng, start=start, season=code) for code, start in seasons],
-        ignore_index=True,
-    )
-    return run_backtest(add_odds(league, model, rng), "E0", ["2324"], Settings(), min_matches=0)
+    league = simulated_seasons(17, 10, 3)
+    return run_backtest(league, "E0", ["2324"], Settings(), min_matches=0)
 
 
 @pytest.fixture(scope="module")
 def result_without_bets() -> BacktestResult:
-    rng = np.random.default_rng(17)
-    model = true_model(8, -0.1, rng)
-    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
-    league = pd.concat(
-        [simulate_league(model, 1, rng, start=start, season=code) for code, start in seasons],
-        ignore_index=True,
-    )
+    league = simulated_seasons(17, 8, 1)
     settings = Settings(edge_threshold=100.0)
-    return run_backtest(add_odds(league, model, rng), "E0", ["2324"], settings, min_matches=0)
+    return run_backtest(league, "E0", ["2324"], settings, min_matches=0)
 
 
 @pytest.fixture
