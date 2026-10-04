@@ -15,6 +15,7 @@ from valuemodel.config import (
     BACKTEST_SEASONS,
     DEFAULT_LEAGUES,
     DEFAULT_SEASONS,
+    FIXTURE_LEAGUES,
     HISTORY_SEASONS,
     MIN_TEAM_MATCHES,
     MODEL_XI,
@@ -77,11 +78,13 @@ def _add_league(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_leagues(parser: argparse.ArgumentParser, purpose: str) -> None:
+def _add_leagues(
+    parser: argparse.ArgumentParser, purpose: str, default: Sequence[str] = DEFAULT_LEAGUES
+) -> None:
     parser.add_argument(
         "--leagues",
         nargs="+",
-        default=list(DEFAULT_LEAGUES),
+        default=list(default),
         type=_argument(validate_league),
         metavar="CODE",
         help=f"{purpose} (default: %(default)s)",
@@ -136,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
         "fixtures",
         help="download upcoming fixtures and refresh this season's results for the dashboard",
     )
-    _add_leagues(fixtures, "leagues whose current season results to refresh")
+    _add_leagues(fixtures, "leagues whose current season results to refresh", FIXTURE_LEAGUES)
 
     shots = commands.add_parser(
         "tune-shots",

@@ -107,7 +107,7 @@ flask --app valuemodel.web run
 
 Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. The bets page can also be ordered by the model's chance of each bet winning.
 
-The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file and refreshes this season's results. That file covers many leagues and changes through the week, and the model can only price leagues it has results for. Charts use Chart.js from a CDN, so they need an internet connection.
+The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file and refreshes this season's results, for the Premier League and the Championship unless `--leagues` says otherwise. That file covers many leagues and changes through the week, and the model can only price leagues it has results for. Charts use Chart.js from a CDN, so they need an internet connection.
 
 ### Development
 

@@ -20,6 +20,8 @@ LEAGUES: dict[str, str] = {
 }
 
 DEFAULT_LEAGUES: tuple[str, ...] = ("E0",)
+# The leagues with downloaded history, so the fixtures page can price them.
+FIXTURE_LEAGUES: tuple[str, ...] = ("E0", "E1")
 
 # Seasons are split so that nothing used to choose settings is later reported
 # as a backtest result. The first two only ever serve as training history.

@@ -207,12 +207,17 @@ def test_fixtures_downloads_the_file_and_refreshes_this_season(
     fake_site: FakeSource, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(cli, "current_season", lambda: "2526")
-    assert cli.main(["fixtures"]) == 0
+    assert cli.main(["fixtures", "--leagues", "E0"]) == 0
     out = capsys.readouterr().out
     assert "Fixtures file has 12 matches" in out
     assert "E0 2025/26: 20 results, latest 2026-01-17" in out
     assert fake_site.requests[0].endswith("/fixtures.csv")
     assert fake_site.requests[1].endswith("/2526/E0.csv")
+
+
+def test_fixtures_refreshes_both_english_leagues_by_default() -> None:
+    assert cli.build_parser().parse_args(["fixtures"]).leagues == ["E0", "E1"]
+    assert cli.build_parser().parse_args(["download"]).leagues == ["E0"]
 
 
 def test_fixtures_reports_a_failed_download(
