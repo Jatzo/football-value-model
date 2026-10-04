@@ -163,6 +163,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="list value bets on listed fixtures and the odds the next round's games need",
     )
 
+    commands.add_parser(
+        "slips",
+        help="suggest the best single, double and treble from the value bets on listed fixtures",
+    )
+
     shots = commands.add_parser(
         "tune-shots",
         help="score the shots-adjusted model for a range of expected goals weights",
@@ -431,6 +436,36 @@ def run_picks(today: date | None = None) -> int:
     return 0
 
 
+def run_slips() -> int:
+    settings = load_settings()
+    bookmaker = BOOKMAKERS[settings.bookmaker]
+    fixtures = views.fixtures_view(settings)
+    if fixtures.status == "missing":
+        raise FileNotFoundError("No fixtures downloaded yet. Run: valuemodel fixtures")
+    if not fixtures.slips:
+        print(f"No suggested slips: no listed game has a value bet at {bookmaker}'s current odds.")
+        return 0
+    for slip in fixtures.slips:
+        print(
+            f"{slip['name']}: odds {slip['odds']:.2f}, model chance {slip['probability']:.1%}, "
+            f"edge {slip['edge']:+.1%}, paper stake {slip['stake']:.2f}, "
+            f"returns {slip['returns']:.2f}"
+        )
+        for leg in slip["legs"]:
+            print(
+                f"  {leg['match']}: {leg['bet']} at {leg['odds']:.2f}, "
+                f"model chance {leg['chance']:.1%}"
+            )
+        print()
+    print(
+        f"Legs are value bets at {bookmaker} odds, one per match. Stakes are "
+        f"{staking_description(settings)} on a {settings.starting_bankroll:g} unit bankroll.\n"
+        "Each extra leg raises the edge but multiplies the model's errors. In the backtests,\n"
+        "single bets chosen this way lost money, so treat these as a test of the model."
+    )
+    return 0
+
+
 def _match(day: pd.Timestamp, time_of_day: object, home: str, away: str) -> str:
     kickoff = f"{day:%a %d %b} {time_of_day or ''}".strip()
     return f"{kickoff}  {home} v {away}"
@@ -509,6 +544,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi, not args.single_league),
         "fixtures": lambda: run_fixtures(args.leagues),
         "picks": lambda: run_picks(),
+        "slips": lambda: run_slips(),
         "tune-shots": lambda: run_tune_shots(args.league, args.weights, not args.single_league),
         "backtest": lambda: run_backtest_command(
             args.league, args.seasons, not args.no_save, not args.single_league

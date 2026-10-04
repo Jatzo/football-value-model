@@ -324,3 +324,49 @@ def test_picks_says_when_nothing_has_value(
     out = capsys.readouterr().out
     assert "No listed game has a value bet at Bet365's current odds." in out
     assert "No season schedule downloaded yet" in out
+
+
+def test_slips_prints_each_suggested_slip(
+    clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    leg = {
+        "key": "k",
+        "match": "Sat 10 Oct 12:30, Arsenal v Leeds",
+        "bet": "Home win",
+        "odds": 2.0,
+        "chance": 0.6,
+    }
+    slip = {
+        "name": "Best single",
+        "legs": [leg],
+        "odds": 2.0,
+        "probability": 0.6,
+        "edge": 0.2,
+        "stake": 20.0,
+        "returns": 40.0,
+    }
+    clean_environment.setattr(
+        cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok", slips=[slip])
+    )
+    assert cli.main(["slips"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == (
+        "Best single: odds 2.00, model chance 60.0%, edge +20.0%, paper stake 20.00, returns 40.00"
+    )
+    assert lines[1] == "  Sat 10 Oct 12:30, Arsenal v Leeds: Home win at 2.00, model chance 60.0%"
+
+
+def test_slips_says_when_there_are_none(
+    clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setattr(cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok"))
+    assert cli.main(["slips"]) == 0
+    assert "No suggested slips" in capsys.readouterr().out
+
+
+def test_slips_needs_the_fixtures_file(
+    clean_environment: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
+    assert cli.main(["slips"]) == 1
+    assert "Run: valuemodel fixtures" in capsys.readouterr().err
