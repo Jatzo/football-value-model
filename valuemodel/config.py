@@ -1,5 +1,6 @@
 """Settings, leagues and seasons."""
 
+import math
 import os
 import re
 from collections.abc import Iterable
@@ -121,10 +122,23 @@ def current_season(today: date | None = None) -> str:
     return season_code(start_year)
 
 
+def season_start_year(code: str) -> int:
+    """The calendar year a season code starts in, for example "2425" gives 2024."""
+    short = int(code[:2])
+    return short + (1900 if short >= 50 else 2000)
+
+
 def season_label(code: str) -> str:
     """Readable form of a season code, for example "2425" gives "2024/25"."""
-    century = 1900 if int(code[:2]) >= 50 else 2000
-    return f"{century + int(code[:2])}/{code[2:]}"
+    return f"{season_start_year(code)}/{code[2:]}"
+
+
+def history_seasons(seasons: Iterable[str]) -> list[str]:
+    """The given seasons plus enough earlier ones to fill the training window."""
+    first = min(season_start_year(code) for code in seasons)
+    years_back = math.ceil(TRAINING_WINDOW_DAYS / 365)
+    earlier = [season_code(year) for year in range(first - years_back, first)]
+    return list(dict.fromkeys([*earlier, *sorted(seasons, key=season_start_year)]))
 
 
 def validate_season(code: str) -> str:

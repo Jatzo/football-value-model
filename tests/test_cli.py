@@ -225,3 +225,11 @@ def test_fixtures_reports_a_failed_download(
     monkeypatch.setattr(cli, "current_season", lambda: "9900")
     assert cli.main(["fixtures"]) == 1
     assert "Could not download" in capsys.readouterr().err
+
+
+def test_backtest_names_the_seasons_it_needs(
+    clean_environment: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
+    assert cli.main(["backtest", "--seasons", "1819"]) == 1
+    assert "--seasons 1516 1617 1718 1819" in capsys.readouterr().err

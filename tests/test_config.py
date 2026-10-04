@@ -6,9 +6,11 @@ import pytest
 from valuemodel.config import (
     Settings,
     current_season,
+    history_seasons,
     load_settings,
     season_code,
     season_label,
+    season_start_year,
     validate_league,
     validate_season,
 )
@@ -102,3 +104,13 @@ def test_season_label(code: str, label: str) -> None:
 )
 def test_current_season(today: date, expected: str) -> None:
     assert current_season(today) == expected
+
+
+def test_season_start_year() -> None:
+    assert season_start_year("2425") == 2024
+    assert season_start_year("9900") == 1999
+
+
+def test_history_seasons_cover_the_training_window() -> None:
+    assert history_seasons(["2425", "2324"]) == ["2021", "2122", "2223", "2324", "2425"]
+    assert history_seasons(["0001"]) == ["9798", "9899", "9900", "0001"]

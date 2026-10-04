@@ -285,11 +285,16 @@ def load_matches(
     """Load cached seasons into one date-ordered frame. Nothing is downloaded here."""
     leagues, seasons = list(leagues), list(seasons)
     for league in leagues:
-        for season in seasons:
-            if not cache_path(settings.raw_dir, league, season).exists():
-                raise FileNotFoundError(
-                    f"No cached data for {league} {season}. Run: valuemodel download"
-                )
+        missing = [
+            season
+            for season in seasons
+            if not cache_path(settings.raw_dir, league, season).exists()
+        ]
+        if missing:
+            raise FileNotFoundError(
+                f"No cached data for {league} {', '.join(missing)}. "
+                f"Run: valuemodel download --leagues {league} --seasons {' '.join(missing)}"
+            )
     return load_available(leagues, seasons, settings)
 
 

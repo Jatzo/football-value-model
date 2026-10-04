@@ -18,6 +18,7 @@ from valuemodel.config import (
     TUNING_SEASONS,
     Settings,
     current_season,
+    history_seasons,
     load_settings,
     season_label,
     validate_league,
@@ -324,8 +325,7 @@ def run_fixtures(leagues: Sequence[str]) -> int:
 
 def run_backtest_command(league: str, seasons: Sequence[str], save: bool) -> int:
     settings = load_settings()
-    needed = list(dict.fromkeys([*DEFAULT_SEASONS, *seasons]))
-    matches = load_matches([league], needed, settings)
+    matches = load_matches([league], history_seasons(seasons), settings)
     result = run_backtest(matches, league, seasons, settings)
     print(format_report(result))
     if save:

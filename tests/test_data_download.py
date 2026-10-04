@@ -87,8 +87,8 @@ def test_load_matches_combines_seasons_in_date_order(
 
 
 def test_load_matches_needs_a_cached_file(settings: Settings) -> None:
-    with pytest.raises(FileNotFoundError, match="valuemodel download"):
-        load_matches(["E0"], ["2526"], settings)
+    with pytest.raises(FileNotFoundError, match="--seasons 2425 2526"):
+        load_matches(["E0"], ["2425", "2526"], settings)
 
 
 def test_load_available_skips_missing_seasons(source: FakeSource, settings: Settings) -> None:
