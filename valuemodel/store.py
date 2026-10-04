@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -114,6 +114,19 @@ def _settings_json(settings: Settings) -> str:
     return json.dumps({**asdict(settings), "data_dir": str(settings.data_dir)})
 
 
+def _settings_from_json(text: str) -> Settings:
+    """Rebuild stored settings, ignoring fields that have since been renamed or removed.
+
+    Old runs then still load after Settings changes, with defaults for anything new.
+    """
+    stored = json.loads(text)
+    known = {item.name for item in fields(Settings)}
+    values = {name: value for name, value in stored.items() if name in known}
+    if "data_dir" in values:
+        values["data_dir"] = Path(values["data_dir"])
+    return Settings(**values)
+
+
 def _append(connection: sqlite3.Connection, table: str, frame: pd.DataFrame, run_id: int) -> None:
     if not frame.empty:
         frame.assign(run_id=run_id).to_sql(table, connection, if_exists="append", index=False)
@@ -173,8 +186,7 @@ def load_run(connection: sqlite3.Connection, run_id: int) -> BacktestResult:
     if row is None:
         raise KeyError(f"No backtest run with id {run_id}")
     league, seasons, xi, settings_json = row
-    stored_settings = json.loads(settings_json)
-    settings = Settings(**{**stored_settings, "data_dir": Path(stored_settings["data_dir"])})
+    settings = _settings_from_json(settings_json)
     result = BacktestResult(
         league=league, seasons=tuple(seasons.split(",")), xi=xi, settings=settings
     )

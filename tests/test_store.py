@@ -80,3 +80,14 @@ def test_round_trip_of_a_run_without_bets(tmp_path: Path, result: BacktestResult
     connection = connect(tmp_path / "runs.sqlite")
     loaded = load_run(connection, save_run(connection, empty))
     assert all(len(bets) == 0 for bets in loaded.bets.values())
+
+
+def test_old_runs_load_after_settings_change(tmp_path: Path, result: BacktestResult) -> None:
+    connection = connect(tmp_path / "runs.sqlite")
+    run_id = save_run(connection, result)
+    with connection:
+        connection.execute(
+            "UPDATE runs SET settings = json_set(settings, '$.retired_option', 1) WHERE id = ?",
+            (run_id,),
+        )
+    assert load_run(connection, run_id).settings == result.settings
