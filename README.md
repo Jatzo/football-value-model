@@ -122,7 +122,7 @@ Settings come from environment variables. Copy `.env.example` to `.env` to chang
 | `VALUEMODEL_MAX_STAKE` | `0.02` | Largest stake on one bet, as a share of the current bankroll |
 | `VALUEMODEL_FLAT_STAKE` | `0.01` | Flat stake, as a share of the starting bankroll |
 | `VALUEMODEL_STARTING_BANKROLL` | `1000` | Starting bankroll in units |
-| `VALUEMODEL_BOOKMAKER` | `b365` | Whose pre-match prices bets are taken at: `b365` or `pinnacle` |
+| `VALUEMODEL_BOOKMAKER` | `b365` | Whose pre-match prices bets are taken at: `b365` or `pinnacle`. With `pinnacle` the follow-the-market strategy is skipped |
 
 ## Backtest
 
