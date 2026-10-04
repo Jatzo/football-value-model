@@ -39,6 +39,8 @@ from valuemodel.labels import (
 )
 from valuemodel.odds import MARKETS
 from valuemodel.picks import (
+    DEFAULT_LEGS,
+    MAX_LEGS,
     Selection,
     best_slips,
     likely_slips,
@@ -394,7 +396,7 @@ class FixturesView:
     slips: list[dict[str, object]] = field(default_factory=list)
 
 
-def fixtures_view(settings: Settings) -> FixturesView:
+def fixtures_view(settings: Settings, legs: int = DEFAULT_LEGS) -> FixturesView:
     path = fixtures_path(settings)
     if not path.exists():
         return FixturesView(status="missing")
@@ -435,7 +437,7 @@ def fixtures_view(settings: Settings) -> FixturesView:
             {**pick, "key": match_key(pick["date"], pick["home_team"], pick["away_team"])}
             for pick in picks.to_dict("records")
         ],
-        slips=slip_cards(picks, settings),
+        slips=slip_cards(picks, settings, legs),
     )
 
 
@@ -444,14 +446,16 @@ def match_label(day: pd.Timestamp, kickoff: object, home: str, away: str) -> str
     return f"{day.strftime('%a %d %b')} {time_of_day}".strip() + f", {home} v {away}"
 
 
-def slip_cards(picks: pd.DataFrame, settings: Settings) -> list[dict[str, object]]:
-    """The suggested single, double and treble, each ready to load into the bet slip."""
+def slip_cards(
+    picks: pd.DataFrame, settings: Settings, legs: int = DEFAULT_LEGS
+) -> list[dict[str, object]]:
+    """The best few value slips of the chosen size, each ready to load into the bet slip."""
     by_leg = {
         (match_key(pick["date"], pick["home_team"], pick["away_team"]), pick["outcome"]): pick
         for pick in picks.to_dict("records")
     }
     cards = []
-    for slip in best_slips(picks, settings):
+    for slip in best_slips(picks, settings, legs):
         legs = []
         for leg in slip.accumulator.legs:
             pick = by_leg[(leg.match, leg.outcome)]
@@ -483,6 +487,18 @@ def slip_cards(picks: pd.DataFrame, settings: Settings) -> list[dict[str, object
 ROUND_CHOICES: tuple[int, ...] = (1, 3, 6, 0)
 ALL_ROUNDS = 0
 DEFAULT_ROUNDS = 3
+
+
+def parse_legs(value: str | None) -> int:
+    """How many legs the suggested slips should have, falling back to the default."""
+    try:
+        legs = int(value or DEFAULT_LEGS)
+    except ValueError:
+        return DEFAULT_LEGS
+    return legs if 1 <= legs <= MAX_LEGS else DEFAULT_LEGS
+
+
+LEG_CHOICES: tuple[int, ...] = tuple(range(1, MAX_LEGS + 1))
 
 
 def parse_rounds(value: str | None) -> int:
@@ -648,8 +664,10 @@ def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dic
     return games
 
 
-def likely_slip_cards(schedule: ScheduleView, edge_threshold: float) -> list[dict[str, object]]:
-    """The likeliest single, double and treble from each league's next round in the schedule.
+def likely_slip_cards(
+    schedule: ScheduleView, edge_threshold: float, legs: int = DEFAULT_LEGS
+) -> list[dict[str, object]]:
+    """The likeliest few slips of the chosen size from each league's next round in the schedule.
 
     There are no odds yet, so each leg carries the price to beat instead, and the
     bet slip asks for the bookmaker's odds once the slip is loaded.
@@ -667,7 +685,7 @@ def likely_slip_cards(schedule: ScheduleView, edge_threshold: float) -> list[dic
                 for outcome, cell in zip(OUTCOME_ORDER, row.cells, strict=True)
             ]
     cards = []
-    for slip in likely_slips(selections):
+    for slip in likely_slips(selections, legs):
         legs = [
             {
                 "key": selection.match,

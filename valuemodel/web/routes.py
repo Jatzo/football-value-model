@@ -21,6 +21,7 @@ from valuemodel.labels import (
     tone,
     units,
 )
+from valuemodel.picks import SIZE_NAMES
 from valuemodel.report import staking_description
 from valuemodel.store import connect, database_path, latest_run_id, list_runs, load_run
 from valuemodel.web import views
@@ -126,14 +127,18 @@ def models() -> str:
 def fixtures() -> str:
     settings = _settings()
     rounds = views.parse_rounds(request.args.get("rounds"))
-    view = views.fixtures_view(settings)
+    legs = views.parse_legs(request.args.get("legs"))
+    view = views.fixtures_view(settings, legs)
     schedule = views.schedule_view(settings, rounds, date.today())
     return render_template(
         "fixtures.html",
         view=view,
         schedule=schedule,
         calculator=views.calculator_games(view, schedule),
-        likely=views.likely_slip_cards(schedule, settings.edge_threshold),
+        likely=views.likely_slip_cards(schedule, settings.edge_threshold, legs),
+        legs=legs,
+        leg_choices=views.LEG_CHOICES,
+        size_names=SIZE_NAMES,
         staking=staking_description(settings),
         round_choices=views.ROUND_CHOICES,
         settings=settings,

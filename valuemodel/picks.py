@@ -8,8 +8,9 @@ from the configured staking method on the starting bankroll.
 
 import itertools
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 import pandas as pd
 
@@ -129,15 +130,62 @@ def accumulator(legs: Sequence[Leg]) -> Accumulator:
     )
 
 
-# Beyond three legs the chance that every leg wins falls fast while the
-# model's errors compound, so suggested slips stop at trebles.
-MAX_LEGS = 3
-SLIP_NAMES: dict[int, str] = {1: "Best single", 2: "Best double", 3: "Best treble"}
+# Suggested slips run from singles to six-folds. Beyond that the chance that
+# every leg wins is tiny while the model's errors keep compounding.
+MAX_LEGS = 6
+DEFAULT_LEGS = 3
+SLIP_OPTIONS = 3
+SIZE_NAMES: dict[int, str] = {
+    1: "Single",
+    2: "Double",
+    3: "Treble",
+    4: "Four-fold",
+    5: "Five-fold",
+    6: "Six-fold",
+}
 
 
 def match_key(day: pd.Timestamp, home: str, away: str) -> str:
     """Identifies a match, so a slip never holds two legs from the same one."""
     return f"{day:%Y-%m-%d} {home} v {away}"
+
+
+def slip_name(size: int, option: int) -> str:
+    return f"{SIZE_NAMES.get(size, f'{size}-fold')}, option {option}"
+
+
+class _Candidate(Protocol):
+    @property
+    def match(self) -> str: ...
+
+
+def top_combinations[T: _Candidate](
+    candidates: Sequence[T], size: int, score: Callable[[T], float], options: int = SLIP_OPTIONS
+) -> list[tuple[T, ...]]:
+    """The highest scoring combinations of `size` candidates from different matches.
+
+    A combination scores the product of its candidates' scores, so it only
+    needs a small search. Only a match's best `options` candidates can appear in
+    a top combination, since any other could be swapped for that many better
+    ones. For the same reason only the best `size + options - 1` matches, ranked
+    by their best candidate, can appear: a combination using any other match
+    leaves at least `options` better matches unused.
+    """
+    by_match: dict[str, list[T]] = {}
+    for candidate in candidates:
+        by_match.setdefault(candidate.match, []).append(candidate)
+    if len(by_match) < size:
+        return []
+    shortlists = [sorted(group, key=score, reverse=True)[:options] for group in by_match.values()]
+    shortlists.sort(key=lambda group: score(group[0]), reverse=True)
+    pool = shortlists[: size + options - 1]
+    combinations = [
+        legs
+        for matches in itertools.combinations(pool, size)
+        for legs in itertools.product(*matches)
+    ]
+    combinations.sort(key=lambda legs: math.prod(score(leg) for leg in legs), reverse=True)
+    return combinations[:options]
 
 
 @dataclass(frozen=True)
@@ -148,17 +196,19 @@ class SuggestedSlip:
 
 
 def best_slips(
-    picks: pd.DataFrame, settings: Settings, max_legs: int = MAX_LEGS
+    picks: pd.DataFrame,
+    settings: Settings,
+    legs: int = DEFAULT_LEGS,
+    options: int = SLIP_OPTIONS,
 ) -> list[SuggestedSlip]:
-    """The best single, double and treble that can be built from the value picks.
+    """The best few slips of a given size that can be built from the value picks.
 
-    For each size, every combination of picks from different matches is tried
-    and the one with the highest combined edge is kept, the likelier one on a
-    tie. Every leg is already a value bet, so adding legs only raises the edge,
-    which is why each size is suggested separately rather than ranked against
+    Combinations of picks from different matches are ranked by combined edge.
+    Every leg is already a value bet, so adding legs only raises the edge,
+    which is why each size is suggested on its own rather than ranked against
     the others. The paper stake treats the slip as one bet at its combined odds.
     """
-    legs = [
+    candidates = [
         Leg(
             match=match_key(pick["date"], pick["home_team"], pick["away_team"]),
             outcome=pick["outcome"],
@@ -168,21 +218,13 @@ def best_slips(
         for pick in picks.to_dict("records")
     ]
     slips = []
-    for size in range(1, max_legs + 1):
-        candidates = [
-            accumulator(combination)
-            for combination in itertools.combinations(legs, size)
-            if len({leg.match for leg in combination}) == size
-        ]
-        if not candidates:
-            break
-        best = max(candidates, key=lambda acca: (acca.edge, acca.probability))
-        amount = stake(best.probability, best.odds, settings.starting_bankroll, settings)
-        slips.append(SuggestedSlip(SLIP_NAMES.get(size, f"Best {size}-fold"), best, amount))
+    for option, combination in enumerate(
+        top_combinations(candidates, legs, lambda leg: leg.odds * leg.probability, options), 1
+    ):
+        acca = accumulator(combination)
+        amount = stake(acca.probability, acca.odds, settings.starting_bankroll, settings)
+        slips.append(SuggestedSlip(slip_name(legs, option), acca, amount))
     return slips
-
-
-LIKELY_NAMES: dict[int, str] = {1: "Likeliest single", 2: "Likeliest double", 3: "Likeliest treble"}
 
 
 @dataclass(frozen=True)
@@ -212,22 +254,19 @@ class LikelySlip:
         return price_to_beat(self.probability, edge_threshold)
 
 
-def likely_slips(selections: Sequence[Selection], max_legs: int = MAX_LEGS) -> list[LikelySlip]:
-    """The single, double and treble the model thinks most likely to win, one leg per match.
+def likely_slips(
+    selections: Sequence[Selection], legs: int = DEFAULT_LEGS, options: int = SLIP_OPTIONS
+) -> list[LikelySlip]:
+    """The few slips of a given size the model thinks most likely to win, one leg per match.
 
-    Each match contributes its single likeliest outcome, and a slip of n legs
-    takes the n likeliest of those, which gives the highest combined chance.
     Without odds there is no edge, so these say nothing about value: they are
     the model's view of what will probably happen, with the price that would
     make each slip worth backing.
     """
-    best: dict[str, Selection] = {}
-    for selection in selections:
-        current = best.get(selection.match)
-        if current is None or selection.probability > current.probability:
-            best[selection.match] = selection
-    ranked = sorted(best.values(), key=lambda selection: selection.probability, reverse=True)
     return [
-        LikelySlip(LIKELY_NAMES.get(size, f"Likeliest {size}-fold"), tuple(ranked[:size]))
-        for size in range(1, min(max_legs, len(ranked)) + 1)
+        LikelySlip(slip_name(legs, option), combination)
+        for option, combination in enumerate(
+            top_combinations(selections, legs, lambda selection: selection.probability, options),
+            1,
+        )
     ]

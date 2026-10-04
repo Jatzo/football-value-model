@@ -198,8 +198,11 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert 'class="quiet add-to-slip" data-key="2026-10-10 Team 00 v Team 01"' in picks
     assert "Newcomers" not in picks
 
-    suggested = html.split('id="suggested"')[1].split("</section>")[0]
-    assert "Best single" in suggested
+    assert "Too few matches have a value bet to build a value treble" in html
+    singles = empty_client.get("/fixtures?legs=1").get_data(as_text=True)
+    suggested = singles.split('id="suggested"')[1].split("</section>")[0]
+    assert "Single, option 1" in suggested
+    assert '<option value="1" selected>1, single</option>' in suggested
     assert 'class="quiet load-slip"' in suggested
     assert "Team 00 v Team 01" in suggested
 
@@ -340,7 +343,7 @@ def test_fixtures_page_shows_the_season_schedule(
     empty_client: FlaskClient, settings: Settings
 ) -> None:
     write_schedule(settings, date.today())
-    html = empty_client.get("/fixtures?rounds=1").get_data(as_text=True)
+    html = empty_client.get("/fixtures?rounds=1&legs=1").get_data(as_text=True)
     schedule = html.split('id="schedule"')[1]
     assert "Arsenal v Leeds" in schedule
     assert "Fulham v Everton" not in schedule
@@ -350,7 +353,7 @@ def test_fixtures_page_shows_the_season_schedule(
 
     suggested = html.split('id="suggested"')[1].split("</section>")[0]
     assert "Likeliest slips for the next round" in suggested
-    assert "Likeliest single" in suggested
+    assert "Single, option 1" in suggested
     assert "&#34;odds&#34;: null" in suggested or '"odds": null' in suggested
 
 
@@ -510,9 +513,11 @@ def test_slip_cards_describe_each_leg_for_the_bet_slip() -> None:
             for home, away, kickoff in [("Arsenal", "Leeds", "12:30"), ("Fulham", "Hull", None)]
         ]
     )
-    cards = views.slip_cards(picks, Settings())
-    assert [card["name"] for card in cards] == ["Best single", "Best double"]
-    double = cards[1]
+    singles = views.slip_cards(picks, Settings(), legs=1)
+    assert [card["name"] for card in singles] == ["Single, option 1", "Single, option 2"]
+    cards = views.slip_cards(picks, Settings(), legs=2)
+    assert [card["name"] for card in cards] == ["Double, option 1"]
+    double = cards[0]
     assert double["legs"] == [
         {
             "key": "2026-10-10 Arsenal v Leeds",
@@ -538,10 +543,17 @@ def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> No
     today = date(2026, 10, 4)
     write_schedule(settings, today)
     schedule = views.schedule_view(settings, rounds=3, today=today)
-    cards = views.likely_slip_cards(schedule, settings.edge_threshold)
     # Matchday 10 is next, and Sunderland's game there cannot be priced, so only
-    # Arsenal v Leeds is left for a single.
-    assert [card["name"] for card in cards] == ["Likeliest single"]
+    # Arsenal v Leeds is left: no treble, and three singles from its outcomes.
+    assert views.likely_slip_cards(schedule, settings.edge_threshold) == []
+    cards = views.likely_slip_cards(schedule, settings.edge_threshold, legs=1)
+    assert [card["name"] for card in cards] == [
+        "Single, option 1",
+        "Single, option 2",
+        "Single, option 3",
+    ]
+    chances = [card["probability"] for card in cards]
+    assert chances == sorted(chances, reverse=True)
     leg = cards[0]["legs"][0]
     assert leg["key"] == "2026-10-08 Arsenal v Leeds"
     assert leg["match"] == "Thu 08 Oct 15:00, Arsenal v Leeds"
@@ -551,3 +563,10 @@ def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> No
     assert leg["chance"] == likeliest.chance
     assert cards[0]["price_to_beat"] == pytest.approx(1.03 / likeliest.chance)
     assert views.likely_slip_cards(views.ScheduleView(rounds=1), 0.03) == []
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [(None, 3), ("1", 1), ("6", 6), ("0", 3), ("7", 3), ("x", 3)]
+)
+def test_parse_legs(value: str | None, expected: int) -> None:
+    assert views.parse_legs(value) == expected

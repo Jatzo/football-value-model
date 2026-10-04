@@ -1,3 +1,6 @@
+import itertools
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,6 +16,7 @@ from valuemodel.picks import (
     best_slips,
     likely_slips,
     price_to_beat,
+    top_combinations,
     value_bets,
 )
 from valuemodel.staking import stake
@@ -156,47 +160,37 @@ PICKS = pick_table(
 )
 
 
-def test_best_slips_take_the_highest_edge_for_each_size() -> None:
-    slips = best_slips(PICKS, Settings())
-    assert [slip.name for slip in slips] == ["Best single", "Best double", "Best treble"]
-    outcomes = [[(leg.match[11:], leg.outcome) for leg in slip.accumulator.legs] for slip in slips]
-    assert outcomes[0] == [("Arsenal v Leeds", "over25")]
-    assert outcomes[1] == [("Arsenal v Leeds", "over25"), ("Fulham v Hull", "home")]
-    assert outcomes[2] == [
-        ("Arsenal v Leeds", "over25"),
-        ("Fulham v Hull", "home"),
-        ("Everton v Wolves", "away"),
+def test_best_slips_give_three_options_of_the_chosen_size() -> None:
+    slips = best_slips(PICKS, Settings(), legs=2)
+    assert [slip.name for slip in slips] == [
+        "Double, option 1",
+        "Double, option 2",
+        "Double, option 3",
     ]
-    treble = slips[2].accumulator
-    assert treble.odds == pytest.approx(2.2 * 2.1 * 3.1)
-    assert treble.edge == pytest.approx(0.6 * 0.5 * 0.33 * 2.2 * 2.1 * 3.1 - 1)
+    legs = [[(leg.match[11:], leg.outcome) for leg in slip.accumulator.legs] for slip in slips]
+    assert legs[0] == [("Arsenal v Leeds", "over25"), ("Fulham v Hull", "home")]
+    edges = [slip.accumulator.edge for slip in slips]
+    assert edges == sorted(edges, reverse=True)
+    assert len({tuple(option) for option in legs}) == 3
 
 
 def test_best_slips_never_repeat_a_match() -> None:
-    for slip in best_slips(PICKS, Settings()):
-        matches = [leg.match for leg in slip.accumulator.legs]
-        assert len(matches) == len(set(matches))
+    for size in (1, 2, 3):
+        for slip in best_slips(PICKS, Settings(), legs=size):
+            matches = [leg.match for leg in slip.accumulator.legs]
+            assert len(matches) == len(set(matches)) == size
 
 
-def test_best_slips_stop_when_there_are_too_few_matches() -> None:
-    two_matches = PICKS.iloc[:3]
-    assert [slip.name for slip in best_slips(two_matches, Settings())] == [
-        "Best single",
-        "Best double",
-    ]
-    assert best_slips(PICKS.iloc[0:0], Settings()) == []
-
-
-def test_best_slips_prefer_the_likelier_bet_on_equal_edge() -> None:
-    picks = pick_table(
-        [("Arsenal", "Leeds", "home", 2.2, 0.5), ("Fulham", "Hull", "home", 1.1, 1.0)]
-    )
-    single = best_slips(picks, Settings(), max_legs=1)[0].accumulator
-    assert single.legs[0].match.endswith("Fulham v Hull")
+def test_best_slips_need_enough_matches() -> None:
+    assert best_slips(PICKS, Settings(), legs=4) == []
+    assert best_slips(PICKS.iloc[0:0], Settings(), legs=1) == []
+    treble = best_slips(PICKS, Settings(), legs=3)
+    assert len(treble) == 2  # three matches, two ways to pick Arsenal v Leeds
+    assert treble[0].accumulator.odds == pytest.approx(2.2 * 2.1 * 3.1)
 
 
 def test_suggested_stakes_treat_the_slip_as_one_bet() -> None:
-    for slip in best_slips(PICKS, Settings()):
+    for slip in best_slips(PICKS, Settings(), legs=2):
         acca = slip.accumulator
         assert slip.stake == pytest.approx(
             stake(acca.probability, acca.odds, Settings().starting_bankroll, Settings())
@@ -213,24 +207,57 @@ SELECTIONS = [
 ]
 
 
-def test_likely_slips_take_each_match_once_likeliest_first() -> None:
-    slips = likely_slips(SELECTIONS)
+def test_likely_slips_give_three_options_likeliest_first() -> None:
+    slips = likely_slips(SELECTIONS, legs=3)
     assert [slip.name for slip in slips] == [
-        "Likeliest single",
-        "Likeliest double",
-        "Likeliest treble",
+        "Treble, option 1",
+        "Treble, option 2",
+        "Treble, option 3",
     ]
-    treble = slips[2]
-    assert [(s.match[11:], s.outcome) for s in treble.selections] == [
+    first, second, third = ([(s.match[11:], s.outcome) for s in slip.selections] for slip in slips)
+    assert first == [
         ("Arsenal v Leeds", "under25"),
         ("Man United v Tottenham", "home"),
         ("West Ham v QPR", "home"),
     ]
-    assert treble.probability == pytest.approx(0.62 * 0.60 * 0.59)
-    assert treble.fair_odds == pytest.approx(1 / (0.62 * 0.60 * 0.59))
-    assert treble.probability * treble.price_to_beat(0.03) - 1 == pytest.approx(0.03)
+    assert second == [
+        ("Arsenal v Leeds", "home"),
+        ("Man United v Tottenham", "home"),
+        ("West Ham v QPR", "home"),
+    ]
+    assert third == [
+        ("Arsenal v Leeds", "under25"),
+        ("Man United v Tottenham", "home"),
+        ("Liverpool v Man City", "away"),
+    ]
+    assert slips[0].probability == pytest.approx(0.62 * 0.60 * 0.59)
+    assert slips[0].probability * slips[0].price_to_beat(0.03) - 1 == pytest.approx(0.03)
 
 
 def test_likely_slips_with_few_matches() -> None:
-    assert [slip.name for slip in likely_slips(SELECTIONS[:2])] == ["Likeliest single"]
-    assert likely_slips([]) == []
+    assert likely_slips(SELECTIONS[:2], legs=2) == []
+    singles = likely_slips(SELECTIONS[:2], legs=1)
+    assert [slip.selections[0].outcome for slip in singles] == ["under25", "home"]
+
+
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("size", [1, 2, 3, 4])
+def test_top_combinations_match_trying_every_combination(seed: int, size: int) -> None:
+    rng = np.random.default_rng(seed)
+    candidates = [
+        Selection(f"match {rng.integers(9)}", f"outcome {index}", float(rng.uniform(0.1, 0.9)))
+        for index in range(25)
+    ]
+    exhaustive = sorted(
+        (
+            combination
+            for combination in itertools.combinations(candidates, size)
+            if len({c.match for c in combination}) == size
+        ),
+        key=lambda combination: math.prod(c.probability for c in combination),
+        reverse=True,
+    )
+    fast = top_combinations(candidates, size, lambda c: c.probability)
+    scores = [math.prod(c.probability for c in combination) for combination in fast]
+    expected = [math.prod(c.probability for c in combination) for combination in exhaustive[:3]]
+    assert scores == pytest.approx(expected)

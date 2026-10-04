@@ -139,10 +139,27 @@
 
 <section class="panel" id="suggested">
   <h2>Suggested slips</h2>
-  {% if view.slips %}
+  <form class="filters" method="get" action="#suggested">
+    {% if run_id %}<input type="hidden" name="run" value="{{ run_id }}">{% endif %}
+    <input type="hidden" name="rounds" value="{{ schedule.rounds }}">
+    <label>Legs
+      <select name="legs" onchange="this.form.submit()">
+        {% for choice in leg_choices %}
+        <option value="{{ choice }}" {% if choice == legs %}selected{% endif %}>{{ choice }}, {{ size_names[choice] | lower }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button type="submit">Show</button></noscript>
+  </form>
   <p class="muted small">
-    The single, double and treble with the highest edge that can be built from the paper bets above, one leg per match.
-    Each extra leg raises the edge but cuts the chance of winning and multiplies the model's errors, so the three are shown side by side rather than ranked.
+    The top three options for a {{ size_names[legs] | lower }}, one leg per match. The options often share legs: the second and third usually swap one leg for the next best choice.
+    You can add as many legs as you like to the bet slip by hand.
+  </p>
+  {% if view.slips %}
+  <h3 class="subheading">Value slips</h3>
+  <p class="muted small">
+    The combinations of paper bets above with the highest edge. Each extra leg raises the edge but cuts the chance of winning and multiplies the model's errors,
+    so a bigger slip is not a better one.
     Paper stakes are {{ staking }} at the slip's combined odds.
   </p>
   <div class="slip-cards">
@@ -165,6 +182,8 @@
     </article>
     {% endfor %}
   </div>
+  {% elif view.picks %}
+  <p class="muted">Too few matches have a value bet to build a value {{ size_names[legs] | lower }}. Choose fewer legs to see value slips.</p>
   {% elif view.status == "ok" %}
   <p class="muted">None of the listed games has a value bet at {{ bookmaker }}'s current odds, so there is nothing to build a slip from yet.</p>
   {% else %}
@@ -173,7 +192,7 @@
   {% if likely %}
   <h3 class="subheading">Likeliest slips for the next round</h3>
   <p class="muted small">
-    The single, double and treble the model thinks most likely to win, from the next round of each league, one leg per match. They need no odds, so they say nothing about value:
+    The combinations the model thinks most likely to win, from the next round of each league. They need no odds, so they say nothing about value:
     each shows the lowest {{ bookmaker }} odds that would make it a value bet. Load one into the bet slip and type {{ bookmaker }}'s odds for each leg to see the returns.
   </p>
   <div class="slip-cards">
@@ -267,6 +286,7 @@
 {% else %}
 <form class="filters panel" method="get" action="#schedule">
   {% if run_id %}<input type="hidden" name="run" value="{{ run_id }}">{% endif %}
+  <input type="hidden" name="legs" value="{{ legs }}">
   <label>Show
     <select name="rounds">
       {% for choice in round_choices %}
