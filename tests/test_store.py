@@ -7,7 +7,14 @@ from simulation import add_odds, simulate_league, true_model
 
 from valuemodel.backtest import BacktestResult, run_backtest
 from valuemodel.config import Settings
-from valuemodel.store import connect, database_path, latest_run_id, load_run, save_run
+from valuemodel.store import (
+    connect,
+    database_path,
+    latest_run_id,
+    list_runs,
+    load_run,
+    save_run,
+)
 
 
 @pytest.fixture(scope="module")
@@ -56,6 +63,9 @@ def test_latest_run_id(tmp_path: Path, result: BacktestResult) -> None:
     second = save_run(connection, result)
     assert second > first
     assert latest_run_id(connection) == second
+    runs = list_runs(connection)
+    assert list(runs["id"]) == [second, first]
+    assert list(runs["seasons"]) == ["2324", "2324"]
 
 
 def test_unknown_run_raises(tmp_path: Path) -> None:

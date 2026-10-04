@@ -154,6 +154,13 @@ def latest_run_id(connection: sqlite3.Connection) -> int | None:
     return row[0]
 
 
+def list_runs(connection: sqlite3.Connection) -> pd.DataFrame:
+    """Every stored run, newest first."""
+    return pd.read_sql_query(
+        "SELECT id, created_at, league, seasons FROM runs ORDER BY id DESC", connection
+    )
+
+
 def _query(connection: sqlite3.Connection, sql: str, run_id: int) -> pd.DataFrame:
     return pd.read_sql_query(sql, connection, params=(run_id,))
 
