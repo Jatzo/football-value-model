@@ -218,6 +218,17 @@
         panel.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
+    document.querySelectorAll(".load-slip").forEach(function (button) {
+      button.addEventListener("click", function () {
+        legs.length = 0;
+        show("slip-message", "");
+        JSON.parse(button.dataset.legs).forEach(function (leg) {
+          addLeg({ key: leg.key, match: leg.match, bet: leg.bet, odds: leg.odds, chance: leg.chance });
+        });
+        render();
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
     fillOutcomes();
     render();
   }

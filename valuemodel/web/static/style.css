@@ -162,6 +162,15 @@ button.quiet { background: transparent; border-color: var(--border); color: var(
 .slip-message { min-height: 1.2em; margin: 4px 0; color: var(--negative); font-size: 13px; }
 .slip { margin-top: 4px; }
 #slip-empty + .calculator-inputs { margin-top: 14px; }
+.slip-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.slip-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.slip-card h3 { margin: 0; font-size: 16px; }
+.slip-card ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 6px; }
+.slip-card dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+.slip-card dl div { display: contents; }
+.slip-card dt { color: var(--muted); }
+.slip-card dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.slip-card button { margin-top: auto; align-self: flex-start; }
 .calculator-inputs label { min-width: 0; max-width: 100%; }
 .calculator-inputs select { max-width: 100%; }
 .calculator-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0 8px; }

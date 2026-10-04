@@ -72,6 +72,36 @@
     <p class="muted">None of the listed games has a value bet at {{ bookmaker }}'s current odds. The file changes through the week as more games are priced.</p>
     {% endif %}
   </section>
+  {% if view.slips %}
+  <section class="panel" id="suggested">
+    <h2>Suggested slips</h2>
+    <p class="muted small">
+      The single, double and treble with the highest edge that can be built from the paper bets above, one leg per match.
+      Each extra leg raises the edge but cuts the chance of winning and multiplies the model's errors, so the three are shown side by side rather than ranked.
+      Paper stakes are {{ staking }} at the slip's combined odds.
+    </p>
+    <div class="slip-cards">
+      {% for slip in view.slips %}
+      <article class="slip-card">
+        <h3>{{ slip.name }}</h3>
+        <ul>
+          {% for leg in slip.legs %}
+          <li>{{ leg.match }}<br><span class="muted">{{ leg.bet }} at {{ leg.odds | odds }}</span></li>
+          {% endfor %}
+        </ul>
+        <dl>
+          <div><dt>Odds</dt><dd>{{ slip.odds | odds }}</dd></div>
+          <div><dt>Model chance</dt><dd>{{ slip.probability | percent }}</dd></div>
+          <div><dt>Edge</dt><dd class="{{ slip.edge | tone }}">{{ slip.edge | signed }}</dd></div>
+          <div><dt>Paper stake</dt><dd>{{ "%.2f" | format(slip.stake) }}</dd></div>
+          <div><dt>Returns if it wins</dt><dd>{{ "%.2f" | format(slip.returns) }}</dd></div>
+        </dl>
+        <button type="button" class="quiet load-slip" data-legs='{{ slip.legs | tojson }}'>Load into bet slip</button>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
   {% if view.likely %}
   <section class="panel">
     <h2>Most likely outcomes</h2>

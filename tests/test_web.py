@@ -197,6 +197,11 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert 'class="quiet add-to-slip" data-key="2026-10-10 Team 00 v Team 01"' in picks
     assert "Newcomers" not in picks
 
+    suggested = html.split('id="suggested"')[1].split("</section>")[0]
+    assert "Best single" in suggested
+    assert 'class="quiet load-slip"' in suggested
+    assert "Team 00 v Team 01" in suggested
+
     games = embedded_json(html, "calculator-data")
     assert isinstance(games, list)
     listed = next(game for game in games if game["match"].endswith("Team 00 v Team 01"))
@@ -476,3 +481,47 @@ def test_most_likely_outcomes_are_sorted_and_marked() -> None:
     assert [(item.home_team, item.outcome) for item in likely] == [("C", "home"), ("A", "away")]
     first_row = views.fixture_rows(priced, "E0")[0]
     assert [cell.likely for cell in first_row.cells] == [False, False, True, False, False]
+
+
+def test_slip_cards_describe_each_leg_for_the_bet_slip() -> None:
+    picks = pd.DataFrame(
+        [
+            {
+                "league": "E0",
+                "date": pd.Timestamp("2026-10-10"),
+                "kickoff": kickoff,
+                "home_team": home,
+                "away_team": away,
+                "market": "1x2",
+                "outcome": "home",
+                "probability": 0.6,
+                "fair_odds": 1 / 0.6,
+                "odds": 2.0,
+                "edge": 0.2,
+                "stake": 10.0,
+            }
+            for home, away, kickoff in [("Arsenal", "Leeds", "12:30"), ("Fulham", "Hull", None)]
+        ]
+    )
+    cards = views.slip_cards(picks, Settings())
+    assert [card["name"] for card in cards] == ["Best single", "Best double"]
+    double = cards[1]
+    assert double["legs"] == [
+        {
+            "key": "2026-10-10 Arsenal v Leeds",
+            "match": "Sat 10 Oct 12:30, Arsenal v Leeds",
+            "bet": "Home win",
+            "odds": 2.0,
+            "chance": 0.6,
+        },
+        {
+            "key": "2026-10-10 Fulham v Hull",
+            "match": "Sat 10 Oct, Fulham v Hull",
+            "bet": "Home win",
+            "odds": 2.0,
+            "chance": 0.6,
+        },
+    ]
+    assert double["odds"] == pytest.approx(4.0)
+    assert double["returns"] == pytest.approx(4.0 * double["stake"])
+    assert views.slip_cards(picks.iloc[0:0], Settings()) == []

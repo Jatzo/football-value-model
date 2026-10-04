@@ -38,7 +38,7 @@ from valuemodel.labels import (
     tone,
 )
 from valuemodel.odds import MARKETS
-from valuemodel.picks import price_to_beat, value_bets
+from valuemodel.picks import best_slips, match_key, price_to_beat, value_bets
 from valuemodel.schedule import (
     SCHEDULE_FILES,
     load_schedule,
@@ -384,6 +384,7 @@ class FixturesView:
     likely: list[LikelyOutcome] = field(default_factory=list)
     latest_result: dict[str, str] = field(default_factory=dict)
     picks: list[dict[str, object]] = field(default_factory=list)
+    slips: list[dict[str, object]] = field(default_factory=list)
 
 
 def fixtures_view(settings: Settings) -> FixturesView:
@@ -413,6 +414,7 @@ def fixtures_view(settings: Settings) -> FixturesView:
     latest = {
         league: str(group["date"].max().date()) for league, group in history.groupby("league")
     }
+    picks = value_bets(priced.fixtures, settings)
     return FixturesView(
         status="ok",
         fetched=fetched_at(path),
@@ -424,9 +426,51 @@ def fixtures_view(settings: Settings) -> FixturesView:
         latest_result=latest,
         picks=[
             {**pick, "key": match_key(pick["date"], pick["home_team"], pick["away_team"])}
-            for pick in value_bets(priced.fixtures, settings).to_dict("records")
+            for pick in picks.to_dict("records")
         ],
+        slips=slip_cards(picks, settings),
     )
+
+
+def match_label(day: pd.Timestamp, kickoff: object, home: str, away: str) -> str:
+    time_of_day = kickoff if isinstance(kickoff, str) else ""
+    return f"{day.strftime('%a %d %b')} {time_of_day}".strip() + f", {home} v {away}"
+
+
+def slip_cards(picks: pd.DataFrame, settings: Settings) -> list[dict[str, object]]:
+    """The suggested single, double and treble, each ready to load into the bet slip."""
+    by_leg = {
+        (match_key(pick["date"], pick["home_team"], pick["away_team"]), pick["outcome"]): pick
+        for pick in picks.to_dict("records")
+    }
+    cards = []
+    for slip in best_slips(picks, settings):
+        legs = []
+        for leg in slip.accumulator.legs:
+            pick = by_leg[(leg.match, leg.outcome)]
+            match = match_label(pick["date"], pick["kickoff"], pick["home_team"], pick["away_team"])
+            legs.append(
+                {
+                    "key": leg.match,
+                    "match": match,
+                    "bet": OUTCOME_LABELS[leg.outcome],
+                    "odds": leg.odds,
+                    "chance": leg.probability,
+                }
+            )
+        acca = slip.accumulator
+        cards.append(
+            {
+                "name": slip.name,
+                "legs": legs,
+                "odds": acca.odds,
+                "probability": acca.probability,
+                "edge": acca.edge,
+                "stake": slip.stake,
+                "returns": acca.returns(slip.stake),
+            }
+        )
+    return cards
 
 
 ROUND_CHOICES: tuple[int, ...] = (1, 3, 6, 0)
@@ -537,11 +581,6 @@ def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
 OUTCOME_ORDER = tuple(outcome for outcomes in MARKETS.values() for outcome in outcomes)
 
 
-def match_key(day: pd.Timestamp, home: str, away: str) -> str:
-    """Identifies a match, so the bet slip can refuse two legs from the same one."""
-    return f"{day:%Y-%m-%d} {home} v {away}"
-
-
 def _calculator_game(
     league: str,
     day: pd.Timestamp,
@@ -554,7 +593,7 @@ def _calculator_game(
     return {
         "key": match_key(day, home, away),
         "league": label(LEAGUES, league),
-        "match": f"{day.strftime('%a %d %b')} {kickoff}".strip() + f", {home} v {away}",
+        "match": match_label(day, kickoff, home, away),
         "outcomes": [
             {"name": OUTCOME_LABELS[outcome], "chance": chance, "odds": price}
             for outcome, chance, price in zip(OUTCOME_ORDER, chances, odds, strict=True)
