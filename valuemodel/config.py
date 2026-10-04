@@ -25,6 +25,11 @@ TUNING_SEASONS: tuple[str, ...] = ("2122", "2223")
 BACKTEST_SEASONS: tuple[str, ...] = ("2324", "2425", "2526")
 DEFAULT_SEASONS: tuple[str, ...] = HISTORY_SEASONS + TUNING_SEASONS + BACKTEST_SEASONS
 
+# Time decay per day. Chosen with `valuemodel tune-xi` on walk-forward forecasts
+# for E0 2021/22 and 2022/23, where 0.003 gave the lowest ranked probability
+# score and log loss for both models. The README records the full table.
+DEFAULT_XI = 0.003
+
 # Matches older than this are left out of a fit. Time decay already gives them
 # little weight, and dropping them keeps each refit fast.
 TRAINING_WINDOW_DAYS = 1095
