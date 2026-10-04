@@ -39,11 +39,14 @@ ODDS_SOURCES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "avg": (("Avg", "BbAv"), ("Avg", "BbAv")),
 }
 
-# Results columns, with the alternative names the notes file lists.
-CORE_SOURCES: dict[str, tuple[str, ...]] = {
+# Columns every file has, then the results columns that only played matches
+# have, with the alternative names the notes file lists.
+MATCH_SOURCES: dict[str, tuple[str, ...]] = {
     "date": ("Date",),
     "home_team": ("HomeTeam",),
     "away_team": ("AwayTeam",),
+}
+RESULT_SOURCES: dict[str, tuple[str, ...]] = {
     "home_goals": ("FTHG", "HG"),
     "away_goals": ("FTAG", "AG"),
     "result": ("FTR", "Res"),
@@ -128,12 +131,20 @@ def _odds(values: pd.Series | None, index: pd.Index) -> pd.Series:
     return odds.where(odds > 1.0)
 
 
-def standardise(raw: pd.DataFrame, league: str, season: str) -> pd.DataFrame:
-    """Map a raw season file onto the project's standard columns."""
-    core = {name: _first_present(raw, names) for name, names in CORE_SOURCES.items()}
+def standardise(
+    raw: pd.DataFrame, league: str, season: str, has_results: bool = True
+) -> pd.DataFrame:
+    """Map a raw file onto the project's standard columns.
+
+    Season files have results. The upcoming fixtures file does not, so with
+    has_results False the goals and result columns are left empty.
+    """
+    required = {**MATCH_SOURCES, **(RESULT_SOURCES if has_results else {})}
+    core = {name: _first_present(raw, names) for name, names in required.items()}
     missing = [name for name, values in core.items() if values is None]
     if missing:
         raise ValueError(f"{league} {season} is missing required columns: {missing}")
+    empty = pd.Series(pd.NA, index=raw.index, dtype="string")
 
     frame = pd.DataFrame(index=raw.index)
     frame["league"] = league
@@ -143,8 +154,8 @@ def standardise(raw: pd.DataFrame, league: str, season: str) -> pd.DataFrame:
     for side in ("home_team", "away_team"):
         frame[side] = core[side].map(normalise_team, na_action="ignore")
     for side in ("home_goals", "away_goals"):
-        frame[side] = pd.to_numeric(core[side], errors="coerce").astype("Int64")
-    frame["result"] = core["result"].str.strip()
+        frame[side] = pd.to_numeric(core.get(side, empty), errors="coerce").astype("Int64")
+    frame["result"] = core.get("result", empty).str.strip()
     for column, names in ODDS_CANDIDATES.items():
         frame[column] = _odds(_first_present(raw, names), raw.index)
     return frame
@@ -223,8 +234,12 @@ def download_season(
     path = cache_path(raw_dir, league, season)
     if path.exists() and not force:
         return False
+    download_csv(client, season_url(league, season), path)
+    return True
 
-    url = season_url(league, season)
+
+def download_csv(client: httpx.Client, url: str, path: Path) -> None:
+    """Fetch a CSV file and save it, replacing any earlier copy only once it is complete."""
     try:
         response = client.get(url)
         response.raise_for_status()
@@ -237,11 +252,10 @@ def download_season(
     if not content.strip() or content.lstrip().startswith(b"<"):
         raise DownloadError(f"{url} did not return a CSV file")
 
-    raw_dir.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     partial = path.with_suffix(".part")
     partial.write_bytes(content)
     partial.replace(path)
-    return True
 
 
 def download_seasons(
