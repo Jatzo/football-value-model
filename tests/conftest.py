@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import httpx
@@ -36,3 +37,12 @@ def fixtures_dir() -> Path:
 @pytest.fixture
 def source() -> FakeSource:
     return FakeSource(FIXTURES)
+
+
+@pytest.fixture
+def clean_environment(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """Remove any settings from the real environment and stop .env being read."""
+    for name in [n for n in os.environ if n.startswith("VALUEMODEL_")]:
+        monkeypatch.delenv(name)
+    monkeypatch.setattr("valuemodel.config.load_dotenv", lambda: None)
+    return monkeypatch

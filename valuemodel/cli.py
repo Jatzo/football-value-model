@@ -5,6 +5,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
+import numpy as np
 import pandas as pd
 
 from valuemodel.config import (
@@ -14,6 +15,7 @@ from valuemodel.config import (
     HISTORY_SEASONS,
     MIN_TEAM_MATCHES,
     TUNING_SEASONS,
+    Settings,
     load_settings,
     validate_league,
     validate_season,
@@ -26,10 +28,12 @@ from valuemodel.data import (
     load_season,
     make_client,
 )
-from valuemodel.markets import predict
+from valuemodel.markets import MarketProbabilities, predict
 from valuemodel.models.common import FittedModel, UnknownTeamError
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
+from valuemodel.odds import MARKETS, edge, find_value, overround, remove_margin
+from valuemodel.staking import stake
 from valuemodel.teams import normalise_team
 from valuemodel.tuning import XI_GRID, evaluate_xi
 
@@ -37,6 +41,8 @@ MODELS: dict[str, Callable[..., FittedModel]] = {
     "dixon-coles": fit_dixon_coles,
     "poisson": fit_poisson,
 }
+
+MARKET_NAMES: dict[str, str] = {"1x2": "the match result", "totals": "over/under 2.5"}
 
 MARKET_LABELS: dict[str, str] = {
     "home": "Home win",
@@ -47,16 +53,23 @@ MARKET_LABELS: dict[str, str] = {
 }
 
 
-def _argument(check: Callable[[str], str]) -> Callable[[str], str]:
+def _argument[T](check: Callable[[str], T]) -> Callable[[str], T]:
     """Let argparse show the checker's own message instead of a generic one."""
 
-    def parse(value: str) -> str:
+    def parse(value: str) -> T:
         try:
             return check(value)
         except ValueError as error:
             raise argparse.ArgumentTypeError(str(error)) from error
 
     return parse
+
+
+def _decimal_odds(value: str) -> float:
+    odds = float(value)
+    if not odds > 1.0:
+        raise ValueError(f"decimal odds must be greater than 1, got {value}")
+    return odds
 
 
 def _add_model_arguments(parser: argparse.ArgumentParser) -> None:
@@ -128,6 +141,20 @@ def build_parser() -> argparse.ArgumentParser:
     forecast.add_argument(
         "--xi", type=float, default=DEFAULT_XI, help="decay rate per day (default: %(default)s)"
     )
+    forecast.add_argument(
+        "--odds",
+        nargs=3,
+        type=_argument(_decimal_odds),
+        metavar=("HOME", "DRAW", "AWAY"),
+        help="bookmaker decimal odds for the match result, to check for value",
+    )
+    forecast.add_argument(
+        "--totals-odds",
+        nargs=2,
+        type=_argument(_decimal_odds),
+        metavar=("OVER", "UNDER"),
+        help="bookmaker decimal odds for over and under 2.5 goals, to check for value",
+    )
     return parser
 
 
@@ -166,10 +193,71 @@ def run_tune_xi(league: str, model: str, xi_values: Sequence[float]) -> int:
     return 0
 
 
+def _staking_description(settings: Settings) -> str:
+    if settings.staking == "flat":
+        return "flat stakes"
+    if settings.kelly_fraction == 0.25:
+        return "quarter Kelly"
+    return f"{settings.kelly_fraction:g} Kelly"
+
+
+def _print_prices(
+    probabilities: MarketProbabilities, quoted: dict[str, float], settings: Settings
+) -> None:
+    """Show model prices and, for any quoted market, the edge against the bookmaker."""
+    fair_odds = probabilities.fair_odds()
+    margin_free: dict[str, float] = {}
+    for outcomes in MARKETS.values():
+        if all(name in quoted for name in outcomes):
+            prices = np.array([quoted[name] for name in outcomes])
+            margin_free.update(
+                zip(outcomes, remove_margin(prices, settings.margin_method), strict=True)
+            )
+
+    model = pd.DataFrame([probabilities.__dict__])
+    bets = find_value(model, pd.DataFrame([quoted], columns=model.columns), settings.edge_threshold)
+    chosen = set(bets["outcome"])
+
+    header = f"{'Market':<10}  {'Chance':>7}  {'Fair odds':>9}"
+    if quoted:
+        header += f"  {'Odds':>6}  {'Book chance':>11}  {'Edge':>7}"
+    print(header)
+    for name, label in MARKET_LABELS.items():
+        chance = getattr(probabilities, name)
+        line = f"{label:<10}  {chance:>7.1%}  {fair_odds[name]:>9.2f}"
+        if name in quoted:
+            gain = edge(chance, quoted[name])
+            flag = "  value" if name in chosen else ""
+            line += f"  {quoted[name]:>6.2f}  {margin_free[name]:>11.1%}  {gain:>+7.1%}{flag}"
+        print(line)
+    if not quoted:
+        return
+
+    for market, outcomes in MARKETS.items():
+        if all(name in quoted for name in outcomes):
+            margin = overround(np.array([quoted[name] for name in outcomes]))
+            print(f"Bookmaker margin on {MARKET_NAMES[market]}: {float(margin):.1%}")
+    if bets.empty:
+        print(f"No outcome reaches the {settings.edge_threshold:.0%} edge threshold")
+    for bet in bets.itertuples():
+        amount = stake(bet.probability, bet.odds, settings.starting_bankroll, settings)
+        print(
+            f"Paper bet: {MARKET_LABELS[bet.outcome]} at {bet.odds:.2f}, stake {amount:.2f} "
+            f"of a {settings.starting_bankroll:g} unit bankroll ({_staking_description(settings)})"
+        )
+
+
 def run_predict(
-    league: str, model: str, home: str, away: str, as_of: pd.Timestamp | None, xi: float
+    league: str,
+    model: str,
+    home: str,
+    away: str,
+    as_of: pd.Timestamp | None,
+    xi: float,
+    quoted: dict[str, float],
 ) -> int:
-    matches = load_matches([league], DEFAULT_SEASONS, load_settings())
+    settings = load_settings()
+    matches = load_matches([league], DEFAULT_SEASONS, settings)
     if as_of is None:
         as_of = matches["date"].max() + pd.Timedelta(days=1)
     home, away = normalise_team(home), normalise_team(away)
@@ -196,11 +284,17 @@ def run_predict(
     print(f"{home} v {away}")
     print(f"{model}, fitted on {league} matches before {as_of.date()}, xi {xi}")
     print(f"Expected goals: {home} {home_goals:.2f}, {away} {away_goals:.2f}")
-    print(f"{'Market':<10}  {'Chance':>7}  {'Fair odds':>9}")
-    fair_odds = probabilities.fair_odds()
-    for name, label in MARKET_LABELS.items():
-        print(f"{label:<10}  {getattr(probabilities, name):>7.1%}  {fair_odds[name]:>9.2f}")
+    _print_prices(probabilities, quoted, settings)
     return 0
+
+
+def _quoted_odds(args: argparse.Namespace) -> dict[str, float]:
+    quoted: dict[str, float] = {}
+    if args.odds:
+        quoted.update(zip(MARKETS["1x2"], args.odds, strict=True))
+    if args.totals_odds:
+        quoted.update(zip(MARKETS["totals"], args.totals_odds, strict=True))
+    return quoted
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -212,8 +306,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "tune-xi":
             return run_tune_xi(args.league, args.model, args.xi)
         if args.command == "predict":
-            return run_predict(args.league, args.model, args.home, args.away, args.as_of, args.xi)
-    except FileNotFoundError as error:
+            return run_predict(
+                args.league,
+                args.model,
+                args.home,
+                args.away,
+                args.as_of,
+                args.xi,
+                _quoted_odds(args),
+            )
+    except (FileNotFoundError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 2

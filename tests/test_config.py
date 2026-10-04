@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -10,15 +9,6 @@ from valuemodel.config import (
     validate_league,
     validate_season,
 )
-
-
-@pytest.fixture
-def clean_environment(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
-    """Remove any settings from the real environment and stop .env being read."""
-    for name in [n for n in os.environ if n.startswith("VALUEMODEL_")]:
-        monkeypatch.delenv(name)
-    monkeypatch.setattr("valuemodel.config.load_dotenv", lambda: None)
-    return monkeypatch
 
 
 @pytest.mark.parametrize(
