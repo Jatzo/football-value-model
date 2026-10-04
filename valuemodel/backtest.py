@@ -8,6 +8,7 @@ a forecaster. They never decide a bet or its stake.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 import numpy as np
 import pandas as pd
@@ -46,6 +47,9 @@ MARKET_STRATEGY = "market"
 MAIN_MODEL = "dixon-coles"
 
 CALIBRATION_BINS = 10
+
+# Edges of the bands used to group bets by the model's chance of them winning.
+PROBABILITY_BANDS: tuple[float, ...] = (0.0, 0.3, 0.45, 0.6, 1.0)
 MARKET_SOURCE = "pinnacle"
 CLOSING_SOURCE = "pinnacle_close"
 
@@ -198,6 +202,33 @@ def betting_summary(bets: pd.DataFrame, starting_bankroll: float) -> dict[str, f
         "level_roi_low": float(low),
         "level_roi_high": float(high),
     }
+
+
+def probability_bands(bets: pd.DataFrame) -> pd.DataFrame:
+    """How bets fared grouped by the model's chance of them winning.
+
+    This answers whether the bets the model was surest about did better. Value
+    bets are chosen where the model disagrees with the market, so the model's
+    confidence on them is not the same as its confidence on matches in general.
+    """
+    rows = []
+    for low, high in pairwise(PROBABILITY_BANDS):
+        in_band = bets[(bets["probability"] > low) & (bets["probability"] <= high)]
+        if in_band.empty:
+            continue
+        level_returns = np.where(in_band["won"], in_band["odds"] - 1, -1.0)
+        rows.append(
+            {
+                "band_low": low,
+                "band_high": high,
+                "bets": len(in_band),
+                "mean_probability": float(in_band["probability"].mean()),
+                "win_rate": float(in_band["won"].mean()),
+                "mean_odds": float(in_band["odds"].mean()),
+                "level_roi": float(level_returns.mean()),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def closing_line_value(bets: pd.DataFrame, matches: pd.DataFrame, method: str) -> pd.DataFrame:

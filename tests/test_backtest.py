@@ -15,6 +15,7 @@ from valuemodel.backtest import (
     max_drawdown,
     model_scores,
     place_bets,
+    probability_bands,
     run_backtest,
     settle,
 )
@@ -301,3 +302,25 @@ def test_flat_stakes_end_to_end(simulated_league: pd.DataFrame) -> None:
     assert len(stakes) > 0
     assert (stakes <= 10.0 + 1e-9).all()
     assert (stakes == 10.0).mean() > 0.5
+
+
+def test_probability_bands_match_hand_calculation() -> None:
+    bets = pd.DataFrame(
+        {
+            "probability": [0.2, 0.25, 0.5, 0.55, 0.7],
+            "won": [False, True, True, False, True],
+            "odds": [5.0, 6.0, 2.2, 2.0, 1.5],
+        }
+    )
+    bands = probability_bands(bets)
+    assert list(bands["band_low"]) == [0.0, 0.45, 0.6]
+    assert list(bands["bets"]) == [2, 2, 1]
+    low = bands.iloc[0]
+    assert low["win_rate"] == 0.5
+    assert low["mean_probability"] == pytest.approx(0.225)
+    assert low["level_roi"] == pytest.approx((-1 + 5) / 2)
+    assert bands.iloc[2]["level_roi"] == pytest.approx(0.5)
+
+
+def test_probability_bands_without_bets() -> None:
+    assert probability_bands(pd.DataFrame(columns=["probability", "won", "odds"])).empty

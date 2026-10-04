@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from valuemodel.backtest import MAIN_MODEL, BacktestResult
+from valuemodel.backtest import MAIN_MODEL, MODELS, BacktestResult, probability_bands
 from valuemodel.config import BOOKMAKERS, Settings, season_label
 from valuemodel.labels import (
     FORECASTER_LABELS,
@@ -108,6 +108,32 @@ def _betting_section(summary: pd.DataFrame) -> str:
     return "Betting results\n" + table(headers, rows)
 
 
+def _confidence_section(result: BacktestResult) -> str:
+    rows = []
+    for strategy in MODELS:
+        bets = result.bets.get(strategy)
+        if bets is None or bets.empty:
+            continue
+        for band in probability_bands(bets).itertuples():
+            rows.append(
+                [
+                    label(STRATEGY_LABELS, strategy),
+                    f"{band.band_low:.0%} to {band.band_high:.0%}",
+                    band.bets,
+                    percent(band.mean_probability),
+                    percent(band.win_rate),
+                    f"{band.mean_odds:.2f}",
+                    percent(band.level_roi, signed=True),
+                ]
+            )
+    headers = ["Strategy", "Model chance", "Bets", "Average", "Won", "Mean odds", "Level ROI"]
+    note = (
+        "Bets the model was surest about win most often, but at short odds. A band only makes\n"
+        "money if its bets win more often than the odds imply, so compare Won with Average."
+    )
+    return "\n".join(["Bets by the model's chance of winning", table(headers, rows), note])
+
+
 def _season_section(season_summary: pd.DataFrame) -> str:
     rows = [
         [
@@ -165,6 +191,7 @@ def format_report(result: BacktestResult) -> str:
         _header(result),
         _clv_section(result.summary),
         _betting_section(result.summary),
+        _confidence_section(result),
         _season_section(result.season_summary),
         _scores_section(result.scores),
     ]
