@@ -5,7 +5,15 @@ from simulation import add_odds, simulate_league, true_model
 
 from valuemodel.config import Settings
 from valuemodel.fixtures import price_fixtures
-from valuemodel.picks import PICK_COLUMNS, Leg, accumulator, price_to_beat, value_bets
+from valuemodel.picks import (
+    PICK_COLUMNS,
+    Leg,
+    accumulator,
+    best_slips,
+    price_to_beat,
+    value_bets,
+)
+from valuemodel.staking import stake
 
 
 @pytest.fixture(scope="module")
@@ -110,3 +118,85 @@ def test_two_legs_from_the_same_match_are_refused() -> None:
 def test_invalid_accumulators_are_refused(legs: list[Leg], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         accumulator(legs)
+
+
+def pick_table(rows: list[tuple[str, str, str, float, float]]) -> pd.DataFrame:
+    """Value picks as value_bets returns them, from (home, away, outcome, odds, chance)."""
+    return pd.DataFrame(
+        [
+            {
+                "league": "E0",
+                "date": pd.Timestamp("2026-10-10"),
+                "kickoff": "15:00",
+                "home_team": home,
+                "away_team": away,
+                "market": "totals" if outcome.startswith(("over", "under")) else "1x2",
+                "outcome": outcome,
+                "probability": chance,
+                "fair_odds": 1 / chance,
+                "odds": odds,
+                "edge": chance * odds - 1,
+                "stake": 10.0,
+            }
+            for home, away, outcome, odds, chance in rows
+        ],
+        columns=PICK_COLUMNS,
+    )
+
+
+PICKS = pick_table(
+    [
+        ("Arsenal", "Leeds", "home", 2.0, 0.6),
+        ("Arsenal", "Leeds", "over25", 2.2, 0.6),
+        ("Fulham", "Hull", "home", 2.1, 0.5),
+        ("Everton", "Wolves", "away", 3.1, 0.33),
+    ]
+)
+
+
+def test_best_slips_take_the_highest_edge_for_each_size() -> None:
+    slips = best_slips(PICKS, Settings())
+    assert [slip.name for slip in slips] == ["Best single", "Best double", "Best treble"]
+    outcomes = [[(leg.match[11:], leg.outcome) for leg in slip.accumulator.legs] for slip in slips]
+    assert outcomes[0] == [("Arsenal v Leeds", "over25")]
+    assert outcomes[1] == [("Arsenal v Leeds", "over25"), ("Fulham v Hull", "home")]
+    assert outcomes[2] == [
+        ("Arsenal v Leeds", "over25"),
+        ("Fulham v Hull", "home"),
+        ("Everton v Wolves", "away"),
+    ]
+    treble = slips[2].accumulator
+    assert treble.odds == pytest.approx(2.2 * 2.1 * 3.1)
+    assert treble.edge == pytest.approx(0.6 * 0.5 * 0.33 * 2.2 * 2.1 * 3.1 - 1)
+
+
+def test_best_slips_never_repeat_a_match() -> None:
+    for slip in best_slips(PICKS, Settings()):
+        matches = [leg.match for leg in slip.accumulator.legs]
+        assert len(matches) == len(set(matches))
+
+
+def test_best_slips_stop_when_there_are_too_few_matches() -> None:
+    two_matches = PICKS.iloc[:3]
+    assert [slip.name for slip in best_slips(two_matches, Settings())] == [
+        "Best single",
+        "Best double",
+    ]
+    assert best_slips(PICKS.iloc[0:0], Settings()) == []
+
+
+def test_best_slips_prefer_the_likelier_bet_on_equal_edge() -> None:
+    picks = pick_table(
+        [("Arsenal", "Leeds", "home", 2.2, 0.5), ("Fulham", "Hull", "home", 1.1, 1.0)]
+    )
+    single = best_slips(picks, Settings(), max_legs=1)[0].accumulator
+    assert single.legs[0].match.endswith("Fulham v Hull")
+
+
+def test_suggested_stakes_treat_the_slip_as_one_bet() -> None:
+    for slip in best_slips(PICKS, Settings()):
+        acca = slip.accumulator
+        assert slip.stake == pytest.approx(
+            stake(acca.probability, acca.odds, Settings().starting_bankroll, Settings())
+        )
+        assert 0 < slip.stake <= 20

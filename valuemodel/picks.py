@@ -6,6 +6,7 @@ games involving a team with too little history. The stake is a paper stake
 from the configured staking method on the starting bankroll.
 """
 
+import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -126,3 +127,56 @@ def accumulator(legs: Sequence[Leg]) -> Accumulator:
         odds=math.prod(leg.odds for leg in legs),
         probability=math.prod(leg.probability for leg in legs),
     )
+
+
+# Beyond three legs the chance that every leg wins falls fast while the
+# model's errors compound, so suggested slips stop at trebles.
+MAX_LEGS = 3
+SLIP_NAMES: dict[int, str] = {1: "Best single", 2: "Best double", 3: "Best treble"}
+
+
+def match_key(day: pd.Timestamp, home: str, away: str) -> str:
+    """Identifies a match, so a slip never holds two legs from the same one."""
+    return f"{day:%Y-%m-%d} {home} v {away}"
+
+
+@dataclass(frozen=True)
+class SuggestedSlip:
+    name: str
+    accumulator: Accumulator
+    stake: float
+
+
+def best_slips(
+    picks: pd.DataFrame, settings: Settings, max_legs: int = MAX_LEGS
+) -> list[SuggestedSlip]:
+    """The best single, double and treble that can be built from the value picks.
+
+    For each size, every combination of picks from different matches is tried
+    and the one with the highest combined edge is kept, the likelier one on a
+    tie. Every leg is already a value bet, so adding legs only raises the edge,
+    which is why each size is suggested separately rather than ranked against
+    the others. The paper stake treats the slip as one bet at its combined odds.
+    """
+    legs = [
+        Leg(
+            match=match_key(pick["date"], pick["home_team"], pick["away_team"]),
+            outcome=pick["outcome"],
+            odds=float(pick["odds"]),
+            probability=float(pick["probability"]),
+        )
+        for pick in picks.to_dict("records")
+    ]
+    slips = []
+    for size in range(1, max_legs + 1):
+        candidates = [
+            accumulator(combination)
+            for combination in itertools.combinations(legs, size)
+            if len({leg.match for leg in combination}) == size
+        ]
+        if not candidates:
+            break
+        best = max(candidates, key=lambda acca: (acca.edge, acca.probability))
+        amount = stake(best.probability, best.odds, settings.starting_bankroll, settings)
+        slips.append(SuggestedSlip(SLIP_NAMES.get(size, f"Best {size}-fold"), best, amount))
+    return slips
