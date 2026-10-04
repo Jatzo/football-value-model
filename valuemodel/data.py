@@ -5,11 +5,14 @@ schema so the rest of the project never sees the raw names.
 """
 
 import io
+import logging
 from pathlib import Path
 
 import pandas as pd
 
 from valuemodel.teams import normalise_team
+
+logger = logging.getLogger(__name__)
 
 OUTCOMES_1X2: dict[str, str] = {"H": "home", "D": "draw", "A": "away"}
 OUTCOMES_TOTALS: dict[str, str] = {">2.5": "over25", "<2.5": "under25"}
@@ -133,3 +136,57 @@ def standardise(raw: pd.DataFrame, league: str, season: str) -> pd.DataFrame:
     for column, names in ODDS_CANDIDATES.items():
         frame[column] = _odds(_first_present(raw, names), raw.index)
     return frame
+
+
+def _score_result(frame: pd.DataFrame) -> pd.Series:
+    """The H, D or A that the goals imply, or NA when a score is missing."""
+    difference = (frame["home_goals"] - frame["away_goals"]).astype("Float64")
+    sign = difference.map(lambda d: (d > 0) - (d < 0), na_action="ignore")
+    return sign.map({1: "H", 0: "D", -1: "A"})
+
+
+def find_problems(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return the rows that cannot be trusted, with the reasons in a problem column."""
+    core = ["date", "home_team", "away_team", "home_goals", "away_goals", "result"]
+    valid_result = frame["result"].isin(["H", "D", "A"])
+    implied = _score_result(frame)
+    checks = pd.DataFrame(
+        {
+            "missing results data": frame[core].isna().any(axis=1),
+            "result is not H, D or A": frame["result"].notna() & ~valid_result,
+            "result does not match the score": valid_result
+            & implied.notna()
+            & (frame["result"] != implied),
+            "team plays itself": frame["home_team"] == frame["away_team"],
+            "fixture appears twice": frame.duplicated(
+                ["league", "season", "home_team", "away_team"], keep=False
+            ),
+        }
+    )
+    checks = checks.fillna(False).astype(bool)
+    failed = checks.any(axis=1)
+    problems = frame[failed].copy()
+    problems["problem"] = ["; ".join(checks.columns[row]) for row in checks[failed].to_numpy()]
+    return problems
+
+
+def load_season(path: Path, league: str, season: str) -> pd.DataFrame:
+    """Load one cached season file as clean, date-ordered matches.
+
+    Rows that fail validation are logged and left out rather than guessed at,
+    because a wrong result would quietly distort every model fitted on it.
+    """
+    frame = standardise(read_raw(path), league, season)
+    problems = find_problems(frame)
+    for _, row in problems.iterrows():
+        logger.warning(
+            "%s %s: dropping %s v %s on %s (%s)",
+            league,
+            season,
+            row["home_team"],
+            row["away_team"],
+            row["date"],
+            row["problem"],
+        )
+    clean = frame.drop(index=problems.index)
+    return clean.sort_values(["date", "kickoff", "home_team"]).reset_index(drop=True)
