@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -9,10 +10,12 @@ from flask.testing import FlaskClient
 from simulation import simulate_league, simulated_seasons, true_model
 
 from valuemodel.backtest import BacktestResult, run_backtest
-from valuemodel.config import Settings
+from valuemodel.config import Settings, current_season
 from valuemodel.labels import NO_COMMON_MATCHES
 from valuemodel.report import format_report
+from valuemodel.schedule import schedule_path
 from valuemodel.store import connect, database_path, save_run
+from valuemodel.teams import SCHEDULE_NAMES
 from valuemodel.web import create_app, views
 
 
@@ -115,6 +118,7 @@ def test_fixtures_page_before_any_download(empty_client: FlaskClient, settings: 
     html = empty_client.get("/fixtures").get_data(as_text=True)
     assert not database_path(settings).exists()
     assert "No fixtures downloaded yet" in html
+    assert "No season schedule downloaded yet" in html
     assert "valuemodel fixtures" in html
 
 
@@ -165,6 +169,93 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert html.count('class="num price value"') >= 1
     assert "Not priced: a team has fewer than 10 matches" in html
     assert "E2 (no cached results)" in html
+
+
+SCHEDULE_TEAMS = ["Arsenal", "Leeds", "Chelsea", "Fulham", "Everton", "Brentford", "Hull", "Wolves"]
+
+
+def write_schedule(settings: Settings, today: date) -> None:
+    """Cache this season's results for eight real names and a schedule of games after today."""
+    season = current_season(today)
+    rng = np.random.default_rng(5)
+    model = true_model(len(SCHEDULE_TEAMS), -0.1, rng)
+    start = (today - timedelta(days=30)).isoformat()
+    history = simulate_league(model, 1, rng, start=start, season=season)
+    names = dict(zip(model.teams, SCHEDULE_TEAMS, strict=True))
+    history[["home_team", "away_team"]] = history[["home_team", "away_team"]].replace(names)
+    settings.raw_dir.mkdir(parents=True, exist_ok=True)
+    (settings.raw_dir / f"E0_{season}.csv").write_text(raw_season(history), encoding="utf-8")
+
+    full = {short: long for long, short in SCHEDULE_NAMES.items()}
+    games = [
+        ("Matchday 9", -3, "Arsenal", "Leeds", {"ft": [1, 0]}),
+        ("Matchday 10", 4, "Arsenal", "Leeds", None),
+        ("Matchday 10", 4, "Chelsea", "Sunderland", None),
+        ("Matchday 11", 11, "Fulham", "Everton", None),
+        ("Matchday 12", 18, "Hull", "Wolves", None),
+    ]
+    matches = [
+        {
+            "round": round_name,
+            "date": (today + timedelta(days=offset)).isoformat(),
+            "time": "15:00",
+            "team1": full[home],
+            "team2": full[away],
+            **({"score": score} if score else {}),
+        }
+        for round_name, offset, home, away, score in games
+    ]
+    path = schedule_path(settings.raw_dir, "E0", season)
+    path.write_text(json.dumps({"name": "test", "matches": matches}), encoding="utf-8")
+
+
+def test_schedule_view_shows_the_next_rounds(settings: Settings) -> None:
+    today = date(2026, 10, 4)
+    write_schedule(settings, today)
+    view = views.schedule_view(settings, rounds=2, today=today)
+    assert not view.missing and not view.problems
+    games = view.rows["E0"]
+    assert [(game.round, game.home_team) for game in games] == [
+        ("Matchday 10", "Arsenal"),
+        ("Matchday 10", "Chelsea"),
+        ("Matchday 11", "Fulham"),
+    ]
+    arsenal, chelsea = games[0], games[1]
+    assert len(arsenal.cells) == 5
+    assert sum(cell.chance for cell in arsenal.cells[:3]) == pytest.approx(1, abs=1e-6)
+    assert sum(cell.likely for cell in arsenal.cells) == 1
+    assert arsenal.home_goals > 0
+    # Sunderland have no results in the cache, so the game is listed but not priced.
+    assert not chelsea.reliable and chelsea.cells == []
+    assert len(views.schedule_view(settings, views.ALL_ROUNDS, today).rows["E0"]) == 4
+
+
+def test_schedule_view_names_leagues_it_cannot_show(settings: Settings) -> None:
+    today = date(2026, 10, 4)
+    write_schedule(settings, today)
+    (settings.raw_dir / f"E0_{current_season(today)}.csv").unlink()
+    view = views.schedule_view(settings, rounds=3, today=today)
+    assert view.problems == {"E0": "no cached results"}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [(None, 3), ("1", 1), ("0", 0), ("6", 6), ("4", 3), ("abc", 3)]
+)
+def test_parse_rounds(value: str | None, expected: int) -> None:
+    assert views.parse_rounds(value) == expected
+
+
+def test_fixtures_page_shows_the_season_schedule(
+    empty_client: FlaskClient, settings: Settings
+) -> None:
+    write_schedule(settings, date.today())
+    html = empty_client.get("/fixtures?rounds=1").get_data(as_text=True)
+    schedule = html.split('id="schedule"')[1]
+    assert "Arsenal v Leeds" in schedule
+    assert "Fulham v Everton" not in schedule
+    assert "Not priced: a team has fewer than 10 matches" in schedule
+    assert '<option value="1" selected>Next 1 round</option>' in schedule
+    assert empty_client.get("/fixtures?rounds=x").status_code == 200
 
 
 def test_headline_cards_lead_with_closing_line_value(result: BacktestResult) -> None:

@@ -105,9 +105,9 @@ valuemodel fixtures
 flask --app valuemodel.web run
 ```
 
-Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. The bets page can also be ordered by the model's chance of each bet winning.
+Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. Below that, a season schedule section gives the model's chances, fair odds and expected goals for the next few rounds of the Premier League and Championship, or every remaining round. It has no odds, so it is the model's view of what might happen rather than a list of bets, and games further ahead use today's team ratings. The bets page can also be ordered by the model's chance of each bet winning.
 
-The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file and refreshes this season's results, for the Premier League and the Championship unless `--leagues` says otherwise. That file covers many leagues and changes through the week, and the model can only price leagues it has results for. Charts use Chart.js from a CDN, so they need an internet connection.
+The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
 
 ### Development
 
@@ -122,7 +122,7 @@ GitHub Actions runs the same checks on every push and pull request. The code is 
 | Module | Purpose |
 | --- | --- |
 | `cli.py`, `config.py` | The `valuemodel` command, settings, leagues and seasons |
-| `data.py`, `teams.py`, `fixtures.py` | Downloading, caching, cleaning and standardising results, odds and upcoming fixtures |
+| `data.py`, `teams.py`, `fixtures.py`, `schedule.py` | Downloading, caching, cleaning and standardising results, odds, upcoming fixtures and season schedules |
 | `models/`, `expected_goals.py` | Poisson, Dixon-Coles and shots-adjusted models with time decay, and shot-based expected goals |
 | `markets.py`, `odds.py`, `staking.py` | Market probabilities, margin removal, value detection and stakes |
 | `walkforward.py`, `tuning.py`, `backtest.py` | Walk-forward forecasting, choosing settings, and the backtest metrics |
@@ -235,7 +235,7 @@ Shots help more here than in the Premier League. The main model beats Dixon-Cole
 
 **When the odds were captured.** The pre-match odds are a single snapshot taken on Friday or Tuesday afternoon, roughly a day before kick-off. They are not the price available at any chosen moment, and the backtest assumes every stake could have been placed at that snapshot.
 
-**Promoted teams.** Newly promoted sides arrive with no recent Premier League results, so their strengths cannot be estimated well. A team with fewer than 10 matches in the training window is flagged and its games are not priced or bet on. For a side with no Premier League matches in the last three years, that means its first 10 games are skipped.
+**Promoted teams.** Newly promoted sides arrive with no recent Premier League results, so their strengths cannot be estimated well. A team with fewer than 10 matches in the training window is flagged and its games are not priced or bet on. For a side with no Premier League matches in the last three years, that means its first 10 games are skipped. The same applies to teams relegated to the Championship, and the season schedule lists their games without a prediction until they have enough matches.
 
 **Backtests are not real betting.** Bookmakers limit accounts that win, prices move once money arrives, and the gap between a backtest and real results is almost always unfavourable. Here the backtest already loses, so this mostly matters as a warning against reading anything into the market strategy's seven bets.
 
@@ -245,7 +245,7 @@ This is a statistics project. It does not place bets and nothing in it is a reco
 
 ## Credits
 
-Data from [football-data.co.uk](https://www.football-data.co.uk/). The model follows Dixon, M. J. and Coles, S. G. (1997), "Modelling association football scores and inefficiencies in the football betting market", *Journal of the Royal Statistical Society: Series C (Applied Statistics)*, 46(2), 265 to 280.
+Results and odds from [football-data.co.uk](https://www.football-data.co.uk/). Season schedules from [openfootball](https://github.com/openfootball/football.json), published into the public domain. The model follows Dixon, M. J. and Coles, S. G. (1997), "Modelling association football scores and inefficiencies in the football betting market", *Journal of the Royal Statistical Society: Series C (Applied Statistics)*, 46(2), 265 to 280.
 
 ## Licence
 

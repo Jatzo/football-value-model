@@ -5,7 +5,7 @@ Nothing here knows about Flask, so the page logic can be tested directly.
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 
@@ -30,6 +30,13 @@ from valuemodel.labels import (
     tone,
 )
 from valuemodel.odds import MARKETS
+from valuemodel.schedule import (
+    SCHEDULE_FILES,
+    load_schedule,
+    predict_games,
+    schedule_path,
+    upcoming_games,
+)
 
 PER_PAGE = 50
 
@@ -399,3 +406,104 @@ def fixtures_view(settings: Settings) -> FixturesView:
         likely=likely_outcomes(priced.fixtures),
         latest_result=latest,
     )
+
+
+ROUND_CHOICES: tuple[int, ...] = (1, 3, 6, 0)
+ALL_ROUNDS = 0
+DEFAULT_ROUNDS = 3
+
+
+def parse_rounds(value: str | None) -> int:
+    """How many rounds of the schedule to show, falling back to the default."""
+    try:
+        rounds = int(value or DEFAULT_ROUNDS)
+    except ValueError:
+        return DEFAULT_ROUNDS
+    return rounds if rounds in ROUND_CHOICES else DEFAULT_ROUNDS
+
+
+@dataclass
+class ChanceCell:
+    chance: float
+    fair_odds: float
+    likely: bool
+
+
+@dataclass
+class ScheduleRow:
+    date: pd.Timestamp
+    kickoff: str
+    round: str
+    home_team: str
+    away_team: str
+    reliable: bool
+    cells: list[ChanceCell]
+    home_goals: float
+    away_goals: float
+
+
+def schedule_rows(priced: pd.DataFrame) -> list[ScheduleRow]:
+    """One row per scheduled game, with the model's chance of each outcome."""
+    rows = []
+    for game in priced.to_dict("records"):
+        cells = []
+        if game["reliable"]:
+            likeliest = max(MARKETS["1x2"], key=lambda outcome: game[outcome])
+            cells = [
+                ChanceCell(
+                    chance=game[outcome], fair_odds=1 / game[outcome], likely=outcome == likeliest
+                )
+                for outcomes in MARKETS.values()
+                for outcome in outcomes
+            ]
+        rows.append(
+            ScheduleRow(
+                date=game["date"],
+                kickoff=game["kickoff"],
+                round=game["round"],
+                home_team=game["home_team"],
+                away_team=game["away_team"],
+                reliable=bool(game["reliable"]),
+                cells=cells,
+                home_goals=game["home_goals"],
+                away_goals=game["away_goals"],
+            )
+        )
+    return rows
+
+
+@dataclass
+class ScheduleView:
+    rounds: int
+    rows: dict[str, list[ScheduleRow]] = field(default_factory=dict)
+    problems: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def missing(self) -> bool:
+        return not self.rows and not self.problems
+
+
+def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
+    """The main model's view of each league's coming rounds, from the saved schedules."""
+    season = current_season(today)
+    view = ScheduleView(rounds=rounds)
+    for league in SCHEDULE_FILES:
+        path = schedule_path(settings.raw_dir, league, season)
+        if not path.exists():
+            continue
+        try:
+            schedule = load_schedule(path, league)
+            games = upcoming_games(schedule, today, rounds if rounds != ALL_ROUNDS else None)
+            if games.empty:
+                view.rows[league] = []
+                continue
+            history = load_available([league], [*DEFAULT_SEASONS, season], settings)
+            if history.empty:
+                view.problems[league] = "no cached results"
+                continue
+            priced = predict_games(history, games, MODEL_XI[MAIN_MODEL])
+        except (ValueError, RuntimeError) as error:
+            view.problems[league] = str(error)
+            continue
+        view.rows[league] = schedule_rows(priced)
+    return view

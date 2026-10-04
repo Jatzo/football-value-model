@@ -93,4 +93,82 @@
   </p>
   {% endif %}
 {% endif %}
+
+<section class="page-heading" id="schedule">
+  <h2>Season schedule</h2>
+  <p class="muted">
+    {{ model_name }} chances for the games still to play, from openfootball's fixture list. There are no odds here:
+    this is the model's view of what might happen, not a list of bets.
+  </p>
+</section>
+{% if schedule.missing %}
+<section class="empty">
+  <h2>No season schedule downloaded yet</h2>
+  <p>Fetch the schedules along with the fixtures and this season's results, then refresh this page.</p>
+  <pre><code>valuemodel fixtures</code></pre>
+</section>
+{% else %}
+<form class="filters panel" method="get" action="#schedule">
+  {% if run_id %}<input type="hidden" name="run" value="{{ run_id }}">{% endif %}
+  <label>Show
+    <select name="rounds">
+      {% for choice in round_choices %}
+      <option value="{{ choice }}" {% if choice == schedule.rounds %}selected{% endif %}>{% if choice %}Next {{ choice }} round{% if choice > 1 %}s{% endif %}{% else %}All remaining rounds{% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Update</button>
+</form>
+{% for league, games in schedule.rows.items() %}
+<section class="panel">
+  <h2>{{ league | league }}</h2>
+  {% if games %}
+  <div class="table-scroll">
+  <table class="fixtures">
+    <thead>
+      <tr>
+        <th>Kick-off</th><th>Match</th>
+        <th class="num">Home</th><th class="num">Draw</th><th class="num">Away</th>
+        <th class="num">Over 2.5</th><th class="num">Under 2.5</th>
+        <th class="num">Expected goals</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for game in games %}
+      {% if loop.changed(game.round) %}
+      <tr class="round-heading"><th colspan="8">{{ game.round }}</th></tr>
+      {% endif %}
+      <tr>
+        <td>{{ game.date.strftime('%a %d %b') }} {{ game.kickoff }}</td>
+        <td>{{ game.home_team }} v {{ game.away_team }}</td>
+        {% for cell in game.cells %}
+        <td class="num price{% if cell.likely %} likely{% endif %}">
+          <span class="fair" title="Model chance">{{ cell.chance | percent }}</span>
+          <span class="offered" title="Model fair odds">{{ cell.fair_odds | odds }}</span>
+        </td>
+        {% else %}
+        <td class="muted small" colspan="5">Not priced: a team has fewer than {{ min_matches }} matches in the training window</td>
+        {% endfor %}
+        <td class="num">{% if game.reliable %}{{ "%.2f" | format(game.home_goals) }} v {{ "%.2f" | format(game.away_goals) }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">
+    Each cell shows the model's chance and the fair odds that chance implies. Underlined cells are each match's most likely result.
+    Every game uses the team ratings as of the latest result in the data, so games further ahead are rougher guides:
+    results between now and then will move the ratings.
+  </p>
+  {% else %}
+  <p class="muted">No games left to play in the schedule.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% if schedule.problems %}
+<p class="muted small">Schedules not shown:
+  {% for league, reason in schedule.problems.items() %}{{ league }} ({{ reason }}){% if not loop.last %}, {% endif %}{% endfor %}.
+</p>
+{% endif %}
+{% endif %}
 {% endblock %}

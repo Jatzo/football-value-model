@@ -156,6 +156,7 @@ tr.best td { font-weight: 600; }
 .price .offered { color: var(--muted); font-size: 13px; }
 .price .edge { font-size: 12.5px; }
 .price.value { background: var(--value-bg); box-shadow: inset 3px 0 0 var(--positive); }
+tr.round-heading th { padding-top: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
 .price.likely .fair { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 
 .site-footer { border-top: 1px solid var(--border); margin-top: 36px; padding-top: 16px; padding-bottom: 28px; color: var(--muted); font-size: 13px; }

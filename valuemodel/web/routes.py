@@ -3,6 +3,7 @@
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 
@@ -124,9 +125,12 @@ def models() -> str:
 @pages.route("/fixtures")
 def fixtures() -> str:
     settings = _settings()
+    rounds = views.parse_rounds(request.args.get("rounds"))
     return render_template(
         "fixtures.html",
         view=views.fixtures_view(settings),
+        schedule=views.schedule_view(settings, rounds, date.today()),
+        round_choices=views.ROUND_CHOICES,
         settings=settings,
         bookmaker=BOOKMAKERS[settings.bookmaker],
         min_matches=MIN_TEAM_MATCHES,
