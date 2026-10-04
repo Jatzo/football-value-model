@@ -29,6 +29,48 @@
   {% if not view.has_odds %}
   <p class="panel">The fixtures file has no {{ bookmaker }} prices, so only the model's fair odds are shown. The data source does not publish Pinnacle odds for upcoming matches.</p>
   {% endif %}
+  <section class="panel" id="picks">
+    <h2>Paper bets</h2>
+    {% if view.picks %}
+    <p class="muted small">
+      Every listed game where {{ bookmaker }}'s odds beat the model's fair odds by at least {{ settings.edge_threshold | share }}, biggest edge first, at most one bet per market per match.
+      The paper stake is {{ staking }} on a {{ "{:,.0f}".format(settings.starting_bankroll) }} unit bankroll. Type your own stake to see what it would return.
+    </p>
+    <div class="table-scroll">
+    <table class="picks">
+      <thead>
+        <tr>
+          <th>Kick-off</th><th>Match</th><th>Bet</th>
+          <th class="num">Model chance</th><th class="num">Fair odds</th><th class="num">{{ bookmaker }} odds</th><th class="num">Edge</th>
+          <th class="num">Paper stake</th><th class="num">Your stake</th><th class="num">Returns</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pick in view.picks %}
+        <tr>
+          <td>{{ pick.date.strftime('%a %d %b') }} {{ pick.kickoff or "" }}</td>
+          <td>{{ pick.home_team }} v {{ pick.away_team }}<br><span class="muted small">{{ pick.league | league }}</span></td>
+          <td>{{ pick.outcome | outcome }}</td>
+          <td class="num">{{ pick.probability | percent }}</td>
+          <td class="num">{{ pick.fair_odds | odds }}</td>
+          <td class="num">{{ pick.odds | odds }}</td>
+          <td class="num {{ pick.edge | tone }}">{{ pick.edge | signed }}</td>
+          <td class="num">{{ "%.2f" | format(pick.stake) }}</td>
+          <td class="num"><input class="stake-input" type="number" min="0" step="0.5" inputmode="decimal" aria-label="Your stake on {{ pick.home_team }} v {{ pick.away_team }}, {{ pick.outcome | outcome }}" data-odds="{{ pick.odds }}" data-chance="{{ pick.probability }}"></td>
+          <td class="num returns" aria-live="polite"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="muted small">
+      Returns include the stake. In the Premier League and Championship backtests, bets chosen this way lost money: their prices were on average 6% to 7% worse than where the market closed.
+      Treat them as a test of the model, not as tips.
+    </p>
+    {% else %}
+    <p class="muted">None of the listed games has a value bet at {{ bookmaker }}'s current odds. The file changes through the week as more games are priced.</p>
+    {% endif %}
+  </section>
   {% if view.likely %}
   <section class="panel">
     <h2>Most likely outcomes</h2>
@@ -94,6 +136,41 @@
   {% endif %}
 {% endif %}
 
+{% if calculator %}
+<section class="panel" id="calculator" data-threshold="{{ settings.edge_threshold }}">
+  <h2>Bet calculator</h2>
+  <p class="muted small">
+    Pick any upcoming game and outcome, enter {{ bookmaker }}'s odds and a stake, and see what the bet would return and how it compares with the model.
+    Listed games start with {{ bookmaker }}'s odds from the fixtures file.
+  </p>
+  <div class="filters calculator-inputs">
+    <label>Match
+      <select id="calc-match"></select>
+    </label>
+    <label>Bet
+      <select id="calc-outcome"></select>
+    </label>
+    <label>{{ bookmaker }} odds
+      <input id="calc-odds" type="number" min="1.01" step="0.01" inputmode="decimal">
+    </label>
+    <label>Stake
+      <input id="calc-stake" type="number" min="0" step="0.5" inputmode="decimal" value="10">
+    </label>
+  </div>
+  <dl class="calculator-results" aria-live="polite">
+    <div><dt>Returns if it wins</dt><dd id="calc-returns">n/a</dd></div>
+    <div><dt>Profit if it wins</dt><dd id="calc-profit">n/a</dd></div>
+    <div><dt>Model chance</dt><dd id="calc-chance">n/a</dd></div>
+    <div><dt>Model fair odds</dt><dd id="calc-fair">n/a</dd></div>
+    <div><dt>Edge</dt><dd id="calc-edge">n/a</dd></div>
+    <div><dt>Model's average profit</dt><dd id="calc-expected">n/a</dd></div>
+  </dl>
+  <p class="muted small" id="calc-verdict"></p>
+  <noscript><p class="muted small">The calculator needs JavaScript.</p></noscript>
+  <script id="calculator-data" type="application/json">{{ calculator | tojson }}</script>
+</section>
+{% endif %}
+
 <section class="page-heading" id="schedule">
   <h2>Season schedule</h2>
   <p class="muted">
@@ -145,6 +222,7 @@
         <td class="num price{% if cell.likely %} likely{% endif %}">
           <span class="fair" title="Model chance">{{ cell.chance | percent }}</span>
           <span class="offered" title="Model fair odds">{{ cell.fair_odds | odds }}</span>
+          <span class="edge" title="Lowest {{ bookmaker }} odds that would be a value bet">value from {{ cell.price_to_beat | odds }}</span>
         </td>
         {% else %}
         <td class="muted small" colspan="5">Not priced: a team has fewer than {{ min_matches }} matches in the training window</td>
@@ -156,7 +234,8 @@
   </table>
   </div>
   <p class="muted small">
-    Each cell shows the model's chance and the fair odds that chance implies. Underlined cells are each match's most likely result.
+    Each cell shows the model's chance, the fair odds that chance implies, and the lowest {{ bookmaker }} odds that would make it a value bet
+    (an edge of at least {{ settings.edge_threshold | share }}). Underlined cells are each match's most likely result.
     Every game uses the team ratings as of the latest result in the data, so games further ahead are rougher guides:
     results between now and then will move the ratings.
   </p>
@@ -171,4 +250,7 @@
 </p>
 {% endif %}
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='calculator.js') }}"></script>
 {% endblock %}

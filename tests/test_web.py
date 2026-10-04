@@ -190,6 +190,62 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert "Not priced: a team has fewer than 10 matches" in html
     assert "E3 (no cached results)" in html
 
+    picks = html.split('id="picks"')[1].split("</section>")[0]
+    assert "Team 00 v Team 01" in picks
+    assert 'class="stake-input"' in picks
+    assert 'data-odds="40.0"' in picks
+    assert "Newcomers" not in picks
+
+    games = embedded_json(html, "calculator-data")
+    assert isinstance(games, list)
+    listed = next(game for game in games if game["match"].endswith("Team 00 v Team 01"))
+    assert listed["league"] == "Premier League"
+    assert [o["name"] for o in listed["outcomes"]][:3] == ["Home win", "Draw", "Away win"]
+    assert listed["outcomes"][0]["odds"] == 40.0
+    assert not any("Newcomers" in game["match"] for game in games)
+
+
+def test_fixtures_page_without_value_says_so(empty_client: FlaskClient, settings: Settings) -> None:
+    rng = np.random.default_rng(3)
+    history = simulate_league(true_model(8, -0.1, rng), 1, rng, start="2025-08-01", season="2526")
+    settings.raw_dir.mkdir(parents=True)
+    (settings.raw_dir / "E0_2526.csv").write_text(raw_season(history), encoding="utf-8")
+    (settings.raw_dir / "fixtures.csv").write_text(
+        "Div,Date,Time,HomeTeam,AwayTeam,B365H,B365D,B365A,B365>2.5,B365<2.5\n"
+        "E0,10/10/2026,15:00,Team 00,Team 01,1.01,1.01,1.01,1.01,1.01\n",
+        encoding="utf-8",
+    )
+    html = empty_client.get("/fixtures").get_data(as_text=True)
+    assert "None of the listed games has a value bet" in html
+
+
+def test_calculator_lists_each_game_once_with_its_odds() -> None:
+    day = pd.Timestamp("2026-10-10")
+    cells = [
+        views.PriceCell(fair_odds=2.0, offered=2.2, edge=0.1, value=True),
+        *[views.PriceCell(fair_odds=4.0, offered=float("nan"), edge=0.0, value=False)] * 4,
+    ]
+    listed = views.FixtureRow(day, "15:00", "Arsenal", "Leeds", True, cells)
+    chance = views.ChanceCell(chance=0.25, fair_odds=4.0, price_to_beat=4.12, likely=False)
+    same = views.ScheduleRow(
+        day, "15:00", "Matchday 6", "Arsenal", "Leeds", True, [chance] * 5, 1, 1
+    )
+    later = views.ScheduleRow(
+        day, "17:30", "Matchday 6", "Hull", "Wolves", True, [chance] * 5, 1, 1
+    )
+    unpriced = views.ScheduleRow(day, "20:00", "Matchday 6", "Leeds", "Newcomers", False, [], 0, 0)
+    games = views.calculator_games(
+        views.FixturesView(status="ok", rows={"E0": [listed]}),
+        views.ScheduleView(rounds=1, rows={"E0": [same, later, unpriced]}),
+    )
+    assert [game["match"] for game in games] == [
+        "Sat 10 Oct 15:00, Arsenal v Leeds",
+        "Sat 10 Oct 17:30, Hull v Wolves",
+    ]
+    assert games[0]["outcomes"][0] == {"name": "Home win", "chance": 0.5, "odds": 2.2}
+    assert games[0]["outcomes"][1]["odds"] is None
+    assert all(outcome["odds"] is None for outcome in games[1]["outcomes"])
+
 
 SCHEDULE_TEAMS = ["Arsenal", "Leeds", "Chelsea", "Fulham", "Everton", "Brentford", "Hull", "Wolves"]
 
@@ -245,6 +301,8 @@ def test_schedule_view_shows_the_next_rounds(settings: Settings) -> None:
     assert sum(cell.chance for cell in arsenal.cells[:3]) == pytest.approx(1, abs=1e-6)
     assert sum(cell.likely for cell in arsenal.cells) == 1
     assert arsenal.home_goals > 0
+    home = arsenal.cells[0]
+    assert home.price_to_beat == pytest.approx((1 + settings.edge_threshold) / home.chance)
     # Sunderland have no results in the cache, so the game is listed but not priced.
     assert not chelsea.reliable and chelsea.cells == []
     assert len(views.schedule_view(settings, views.ALL_ROUNDS, today).rows["E0"]) == 4

@@ -156,6 +156,13 @@ tr.best td { font-weight: 600; }
 .price .offered { color: var(--muted); font-size: 13px; }
 .price .edge { font-size: 12.5px; }
 .price.value { background: var(--value-bg); box-shadow: inset 3px 0 0 var(--positive); }
+.stake-input { width: 6.5em; text-align: right; }
+.calculator-inputs label { min-width: 0; max-width: 100%; }
+.calculator-inputs select { max-width: 100%; }
+.calculator-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0 8px; }
+.calculator-results div { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.calculator-results dt { font-size: 13px; color: var(--muted); }
+.calculator-results dd { margin: 4px 0 0; font-size: 20px; font-weight: 600; }
 tr.round-heading th { padding-top: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
 .price.likely .fair { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 

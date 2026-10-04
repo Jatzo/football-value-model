@@ -29,6 +29,7 @@ from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_
 from valuemodel.labels import (
     MARKET_LABELS,
     NO_COMMON_MATCHES,
+    OUTCOME_LABELS,
     STRATEGY_LABELS,
     is_missing,
     label,
@@ -37,6 +38,7 @@ from valuemodel.labels import (
     tone,
 )
 from valuemodel.odds import MARKETS
+from valuemodel.picks import price_to_beat, value_bets
 from valuemodel.schedule import (
     SCHEDULE_FILES,
     load_schedule,
@@ -381,6 +383,7 @@ class FixturesView:
     has_odds: bool = True
     likely: list[LikelyOutcome] = field(default_factory=list)
     latest_result: dict[str, str] = field(default_factory=dict)
+    picks: list[dict[str, object]] = field(default_factory=list)
 
 
 def fixtures_view(settings: Settings) -> FixturesView:
@@ -419,6 +422,7 @@ def fixtures_view(settings: Settings) -> FixturesView:
         has_odds=bool(priced.fixtures.filter(like="odds_").notna().any().any()),
         likely=likely_outcomes(priced.fixtures),
         latest_result=latest,
+        picks=value_bets(priced.fixtures, settings).to_dict("records"),
     )
 
 
@@ -440,6 +444,7 @@ def parse_rounds(value: str | None) -> int:
 class ChanceCell:
     chance: float
     fair_odds: float
+    price_to_beat: float
     likely: bool
 
 
@@ -456,8 +461,8 @@ class ScheduleRow:
     away_goals: float
 
 
-def schedule_rows(priced: pd.DataFrame) -> list[ScheduleRow]:
-    """One row per scheduled game, with the model's chance of each outcome."""
+def schedule_rows(priced: pd.DataFrame, edge_threshold: float) -> list[ScheduleRow]:
+    """One row per scheduled game, with the model's chance of each outcome and its price to beat."""
     rows = []
     for game in priced.to_dict("records"):
         cells = []
@@ -465,7 +470,10 @@ def schedule_rows(priced: pd.DataFrame) -> list[ScheduleRow]:
             likeliest = max(MARKETS["1x2"], key=lambda outcome: game[outcome])
             cells = [
                 ChanceCell(
-                    chance=game[outcome], fair_odds=1 / game[outcome], likely=outcome == likeliest
+                    chance=game[outcome],
+                    fair_odds=1 / game[outcome],
+                    price_to_beat=price_to_beat(game[outcome], edge_threshold),
+                    likely=outcome == likeliest,
                 )
                 for outcomes in MARKETS.values()
                 for outcome in outcomes
@@ -519,5 +527,64 @@ def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
         except (ValueError, RuntimeError) as error:
             view.problems[league] = str(error)
             continue
-        view.rows[league] = schedule_rows(priced)
+        view.rows[league] = schedule_rows(priced, settings.edge_threshold)
     return view
+
+
+OUTCOME_ORDER = tuple(outcome for outcomes in MARKETS.values() for outcome in outcomes)
+
+
+def _calculator_game(
+    league: str,
+    day: pd.Timestamp,
+    kickoff: str,
+    match: str,
+    chances: list[float],
+    odds: list[float | None],
+) -> dict[str, object]:
+    return {
+        "league": label(LEAGUES, league),
+        "match": f"{day.strftime('%a %d %b')} {kickoff}".strip() + f", {match}",
+        "outcomes": [
+            {"name": OUTCOME_LABELS[outcome], "chance": chance, "odds": price}
+            for outcome, chance, price in zip(OUTCOME_ORDER, chances, odds, strict=True)
+        ],
+    }
+
+
+def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dict[str, object]]:
+    """Every priced upcoming game for the bet calculator, with the bookmaker's odds where listed.
+
+    A game in both the fixtures file and the schedule appears once, with its odds.
+    """
+    games, seen = [], set()
+    for league, rows in fixtures.rows.items():
+        for row in rows:
+            if not row.reliable:
+                continue
+            seen.add((row.date.date(), row.home_team, row.away_team))
+            games.append(
+                _calculator_game(
+                    league,
+                    row.date,
+                    row.kickoff,
+                    f"{row.home_team} v {row.away_team}",
+                    [1 / cell.fair_odds for cell in row.cells],
+                    [None if is_missing(cell.offered) else cell.offered for cell in row.cells],
+                )
+            )
+    for league, rows in schedule.rows.items():
+        for row in rows:
+            if not row.reliable or (row.date.date(), row.home_team, row.away_team) in seen:
+                continue
+            games.append(
+                _calculator_game(
+                    league,
+                    row.date,
+                    row.kickoff,
+                    f"{row.home_team} v {row.away_team}",
+                    [cell.chance for cell in row.cells],
+                    [None] * len(row.cells),
+                )
+            )
+    return games

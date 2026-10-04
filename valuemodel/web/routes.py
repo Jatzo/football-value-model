@@ -126,10 +126,14 @@ def models() -> str:
 def fixtures() -> str:
     settings = _settings()
     rounds = views.parse_rounds(request.args.get("rounds"))
+    view = views.fixtures_view(settings)
+    schedule = views.schedule_view(settings, rounds, date.today())
     return render_template(
         "fixtures.html",
-        view=views.fixtures_view(settings),
-        schedule=views.schedule_view(settings, rounds, date.today()),
+        view=view,
+        schedule=schedule,
+        calculator=views.calculator_games(view, schedule),
+        staking=staking_description(settings),
         round_choices=views.ROUND_CHOICES,
         settings=settings,
         bookmaker=BOOKMAKERS[settings.bookmaker],
