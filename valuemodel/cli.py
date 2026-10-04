@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     download = commands.add_parser(
         "download", help="download and cache results and odds from football-data.co.uk"
     )
-    _add_leagues(download, "league codes such as E0")
+    _add_leagues(download, "league codes such as E0", linked_leagues(DEFAULT_LEAGUES[0]))
     download.add_argument(
         "--seasons",
         nargs="+",

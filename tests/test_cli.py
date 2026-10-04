@@ -22,7 +22,7 @@ def fake_site(
 def test_download_reports_each_season(
     fake_site: FakeSource, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert cli.main(["download", "--seasons", "1516", "2526"]) == 0
+    assert cli.main(["download", "--leagues", "E0", "--seasons", "1516", "2526"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines == [
         "E0 1516  downloaded   20 matches  Pinnacle closing odds for 20",
@@ -33,8 +33,8 @@ def test_download_reports_each_season(
 def test_second_run_uses_the_cache(
     fake_site: FakeSource, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    cli.main(["download", "--seasons", "2526"])
-    cli.main(["download", "--seasons", "2526"])
+    cli.main(["download", "--leagues", "E0", "--seasons", "2526"])
+    cli.main(["download", "--leagues", "E0", "--seasons", "2526"])
     assert len(fake_site.requests) == 1
     assert "cached" in capsys.readouterr().out.splitlines()[-1]
 
@@ -226,7 +226,8 @@ def test_leagues_without_a_schedule_source_are_named() -> None:
 
 def test_fixtures_refreshes_both_english_leagues_by_default() -> None:
     assert cli.build_parser().parse_args(["fixtures"]).leagues == ["E0", "E1"]
-    assert cli.build_parser().parse_args(["download"]).leagues == ["E0"]
+    # The default backtest fits the Premier League with the Championship.
+    assert cli.build_parser().parse_args(["download"]).leagues == ["E0", "E1"]
 
 
 def test_fixtures_reports_a_failed_download(
