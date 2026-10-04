@@ -157,6 +157,11 @@ tr.best td { font-weight: 600; }
 .price .edge { font-size: 12.5px; }
 .price.value { background: var(--value-bg); box-shadow: inset 3px 0 0 var(--positive); }
 .stake-input { width: 6.5em; text-align: right; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+button.quiet { background: transparent; border-color: var(--border); color: var(--text); font-weight: 500; }
+.slip-message { min-height: 1.2em; margin: 4px 0; color: var(--negative); font-size: 13px; }
+.slip { margin-top: 4px; }
+#slip-empty + .calculator-inputs { margin-top: 14px; }
 .calculator-inputs label { min-width: 0; max-width: 100%; }
 .calculator-inputs select { max-width: 100%; }
 .calculator-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0 8px; }

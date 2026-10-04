@@ -422,7 +422,10 @@ def fixtures_view(settings: Settings) -> FixturesView:
         has_odds=bool(priced.fixtures.filter(like="odds_").notna().any().any()),
         likely=likely_outcomes(priced.fixtures),
         latest_result=latest,
-        picks=value_bets(priced.fixtures, settings).to_dict("records"),
+        picks=[
+            {**pick, "key": match_key(pick["date"], pick["home_team"], pick["away_team"])}
+            for pick in value_bets(priced.fixtures, settings).to_dict("records")
+        ],
     )
 
 
@@ -534,17 +537,24 @@ def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
 OUTCOME_ORDER = tuple(outcome for outcomes in MARKETS.values() for outcome in outcomes)
 
 
+def match_key(day: pd.Timestamp, home: str, away: str) -> str:
+    """Identifies a match, so the bet slip can refuse two legs from the same one."""
+    return f"{day:%Y-%m-%d} {home} v {away}"
+
+
 def _calculator_game(
     league: str,
     day: pd.Timestamp,
     kickoff: str,
-    match: str,
+    home: str,
+    away: str,
     chances: list[float],
     odds: list[float | None],
 ) -> dict[str, object]:
     return {
+        "key": match_key(day, home, away),
         "league": label(LEAGUES, league),
-        "match": f"{day.strftime('%a %d %b')} {kickoff}".strip() + f", {match}",
+        "match": f"{day.strftime('%a %d %b')} {kickoff}".strip() + f", {home} v {away}",
         "outcomes": [
             {"name": OUTCOME_LABELS[outcome], "chance": chance, "odds": price}
             for outcome, chance, price in zip(OUTCOME_ORDER, chances, odds, strict=True)
@@ -568,7 +578,8 @@ def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dic
                     league,
                     row.date,
                     row.kickoff,
-                    f"{row.home_team} v {row.away_team}",
+                    row.home_team,
+                    row.away_team,
                     [1 / cell.fair_odds for cell in row.cells],
                     [None if is_missing(cell.offered) else cell.offered for cell in row.cells],
                 )
@@ -582,7 +593,8 @@ def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dic
                     league,
                     row.date,
                     row.kickoff,
-                    f"{row.home_team} v {row.away_team}",
+                    row.home_team,
+                    row.away_team,
                     [cell.chance for cell in row.cells],
                     [None] * len(row.cells),
                 )

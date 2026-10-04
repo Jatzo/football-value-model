@@ -194,12 +194,14 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert "Team 00 v Team 01" in picks
     assert 'class="stake-input"' in picks
     assert 'data-odds="40.0"' in picks
+    assert 'class="quiet add-to-slip" data-key="2026-10-10 Team 00 v Team 01"' in picks
     assert "Newcomers" not in picks
 
     games = embedded_json(html, "calculator-data")
     assert isinstance(games, list)
     listed = next(game for game in games if game["match"].endswith("Team 00 v Team 01"))
     assert listed["league"] == "Premier League"
+    assert listed["key"] == "2026-10-10 Team 00 v Team 01"
     assert [o["name"] for o in listed["outcomes"]][:3] == ["Home win", "Draw", "Away win"]
     assert listed["outcomes"][0]["odds"] == 40.0
     assert not any("Newcomers" in game["match"] for game in games)
@@ -241,6 +243,10 @@ def test_calculator_lists_each_game_once_with_its_odds() -> None:
     assert [game["match"] for game in games] == [
         "Sat 10 Oct 15:00, Arsenal v Leeds",
         "Sat 10 Oct 17:30, Hull v Wolves",
+    ]
+    assert [game["key"] for game in games] == [
+        "2026-10-10 Arsenal v Leeds",
+        "2026-10-10 Hull v Wolves",
     ]
     assert games[0]["outcomes"][0] == {"name": "Home win", "chance": 0.5, "odds": 2.2}
     assert games[0]["outcomes"][1]["odds"] is None

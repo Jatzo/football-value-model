@@ -42,7 +42,7 @@
         <tr>
           <th>Kick-off</th><th>Match</th><th>Bet</th>
           <th class="num">Model chance</th><th class="num">Fair odds</th><th class="num">{{ bookmaker }} odds</th><th class="num">Edge</th>
-          <th class="num">Paper stake</th><th class="num">Your stake</th><th class="num">Returns</th>
+          <th class="num">Paper stake</th><th class="num">Your stake</th><th class="num">Returns</th><th><span class="visually-hidden">Bet slip</span></th>
         </tr>
       </thead>
       <tbody>
@@ -58,6 +58,7 @@
           <td class="num">{{ "%.2f" | format(pick.stake) }}</td>
           <td class="num"><input class="stake-input" type="number" min="0" step="0.5" inputmode="decimal" aria-label="Your stake on {{ pick.home_team }} v {{ pick.away_team }}, {{ pick.outcome | outcome }}" data-odds="{{ pick.odds }}" data-chance="{{ pick.probability }}"></td>
           <td class="num returns" aria-live="polite"></td>
+          <td><button type="button" class="quiet add-to-slip" data-key="{{ pick.key }}" data-match="{{ pick.date.strftime('%a %d %b') }} {{ pick.kickoff or '' }}, {{ pick.home_team }} v {{ pick.away_team }}" data-bet="{{ pick.outcome | outcome }}" data-odds="{{ pick.odds }}" data-chance="{{ pick.probability }}">Add</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -138,10 +139,10 @@
 
 {% if calculator %}
 <section class="panel" id="calculator" data-threshold="{{ settings.edge_threshold }}">
-  <h2>Bet calculator</h2>
+  <h2>Bet slip</h2>
   <p class="muted small">
-    Pick any upcoming game and outcome, enter {{ bookmaker }}'s odds and a stake, and see what the bet would return and how it compares with the model.
-    Listed games start with {{ bookmaker }}'s odds from the fixtures file.
+    Pick any upcoming game and outcome, enter {{ bookmaker }}'s odds and add it to the slip. One selection is a single bet; two or more from different matches make an accumulator,
+    which only wins if every leg wins. Listed games start with {{ bookmaker }}'s odds from the fixtures file.
   </p>
   <div class="filters calculator-inputs">
     <label>Match
@@ -153,20 +154,39 @@
     <label>{{ bookmaker }} odds
       <input id="calc-odds" type="number" min="1.01" step="0.01" inputmode="decimal">
     </label>
+    <button type="button" id="calc-add">Add to slip</button>
+  </div>
+  <p class="muted small" id="calc-preview" aria-live="polite"></p>
+  <p class="slip-message" id="slip-message" role="status"></p>
+  <div class="table-scroll">
+  <table class="slip">
+    <thead><tr><th>Match</th><th>Bet</th><th class="num">Odds</th><th class="num">Model chance</th><th class="num">Edge</th><th></th></tr></thead>
+    <tbody id="slip-legs"></tbody>
+  </table>
+  </div>
+  <p class="muted small" id="slip-empty">The slip is empty. Add a selection above, or use Add on a paper bet.</p>
+  <div class="filters calculator-inputs">
     <label>Stake
       <input id="calc-stake" type="number" min="0" step="0.5" inputmode="decimal" value="10">
     </label>
+    <button type="button" class="quiet" id="slip-clear">Clear slip</button>
   </div>
   <dl class="calculator-results" aria-live="polite">
+    <div><dt id="slip-kind">Bet</dt><dd id="calc-combined">n/a</dd></div>
     <div><dt>Returns if it wins</dt><dd id="calc-returns">n/a</dd></div>
     <div><dt>Profit if it wins</dt><dd id="calc-profit">n/a</dd></div>
-    <div><dt>Model chance</dt><dd id="calc-chance">n/a</dd></div>
+    <div><dt>Model chance it wins</dt><dd id="calc-chance">n/a</dd></div>
     <div><dt>Model fair odds</dt><dd id="calc-fair">n/a</dd></div>
     <div><dt>Edge</dt><dd id="calc-edge">n/a</dd></div>
     <div><dt>Model's average profit</dt><dd id="calc-expected">n/a</dd></div>
   </dl>
   <p class="muted small" id="calc-verdict"></p>
-  <noscript><p class="muted small">The calculator needs JavaScript.</p></noscript>
+  <p class="muted small">
+    An accumulator multiplies the odds, and the model multiplies its chances, which is fair because the legs come from different matches.
+    Two bets on the same match are linked, so the slip takes one leg per match. Small edges compound in an accumulator, but so do the model's errors:
+    in the backtests single bets chosen by edge already lost money, and an accumulator of them would lose faster.
+  </p>
+  <noscript><p class="muted small">The bet slip needs JavaScript.</p></noscript>
   <script id="calculator-data" type="application/json">{{ calculator | tojson }}</script>
 </section>
 {% endif %}
