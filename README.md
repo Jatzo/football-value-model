@@ -12,7 +12,7 @@ The model does not beat the market. Over three Premier League seasons, 2023/24 t
 
 Each team gets two numbers: an attack strength and a defence strength. A team's expected goals in a match come from its own attack, the opponent's defence and, for the home side, a home advantage term shared by the whole league. Goals are treated as Poisson counts, which gives a probability for every scoreline up to 10 goals each. Adding up the right scorelines gives the chances of a home win, a draw, an away win, and over or under 2.5 goals.
 
-That is the baseline Poisson model. Dixon and Coles (1997) noticed that real football has slightly different numbers of 0-0, 1-0, 0-1 and 1-1 results than independent Poisson counts predict, and added one parameter, rho, to correct those four scores. That is the main model here. On recent Premier League data the fitted rho is close to zero, so in practice the two models give almost the same prices.
+That is the baseline Poisson model. Dixon and Coles (1997) noticed that real football has slightly different numbers of 0-0, 1-0, 0-1 and 1-1 results than independent Poisson counts predict, and added one parameter, rho, to correct those four scores. That is the main model here. On recent Premier League data the fitted rho is small and unstable: across the backtest it drifts between about -0.11 and +0.08, changing sign along the way. In practice the two models give almost the same prices.
 
 Both models are fitted by maximum likelihood with `scipy.optimize` and an analytic gradient. The attack strengths are constrained to sum to zero so the fit has a single answer. Recent matches count for more than old ones: each match is weighted by `exp(-xi * days_ago)`, and matches more than three years old are left out. Fitting three seasons takes a few hundredths of a second, which matters because the backtest refits before every round of matches.
 
@@ -101,11 +101,12 @@ GitHub Actions runs the same checks on every push and pull request. The code is 
 
 | Module | Purpose |
 | --- | --- |
-| `data.py` | Downloads, caches, cleans and standardises the source files |
+| `cli.py`, `config.py` | The `valuemodel` command, settings, leagues and seasons |
+| `data.py`, `teams.py`, `fixtures.py` | Downloading, caching, cleaning and standardising results, odds and upcoming fixtures |
 | `models/` | Poisson and Dixon-Coles models with time decay |
 | `markets.py`, `odds.py`, `staking.py` | Market probabilities, margin removal, value detection and stakes |
-| `walkforward.py`, `backtest.py` | Walk-forward forecasting and the backtest metrics |
-| `store.py`, `report.py`, `web/` | SQLite storage, the text report and the dashboard |
+| `walkforward.py`, `tuning.py`, `backtest.py` | Walk-forward forecasting, choosing `xi`, and the backtest metrics |
+| `store.py`, `report.py`, `labels.py`, `web/` | SQLite storage, the text report, shared display formats and the dashboard |
 
 ## Configuration
 
