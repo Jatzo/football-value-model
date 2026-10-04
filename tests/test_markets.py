@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 import pytest
 from scipy.stats import poisson
 from simulation import true_model
 
-from valuemodel.markets import market_probabilities, predict
+from valuemodel.markets import OUTCOMES, market_probabilities, predict, price_matches
+from valuemodel.models.common import FittedModel
 
 
 def test_markets_from_a_small_matrix() -> None:
@@ -39,10 +41,15 @@ def test_model_markets_sum_to_one(rho: float) -> None:
         assert markets.over25 + markets.under25 == pytest.approx(1.0, abs=1e-9)
 
 
-def test_fair_odds_are_reciprocals() -> None:
-    model = true_model(20, -0.1, np.random.default_rng(3))
-    markets = predict(model, "Team 00", "Team 01")
-    odds = markets.fair_odds()
-    assert odds["home"] == pytest.approx(1 / markets.home)
-    assert odds["under25"] == pytest.approx(1 / markets.under25)
-    assert set(odds) == {"home", "draw", "away", "over25", "under25"}
+def test_price_matches_leaves_unreliable_matches_unpriced() -> None:
+    model = true_model(4, -0.1, np.random.default_rng(3))
+    model = FittedModel(**{**model.__dict__, "match_counts": {"Team 00": 12, "Team 01": 12}})
+    matches = pd.DataFrame(
+        {"home_team": ["Team 00", "Team 02"], "away_team": ["Team 01", "Team 00"]}, index=[7, 9]
+    )
+    prices = price_matches(model, matches, min_matches=10)
+    assert list(prices.index) == [7, 9]
+    assert list(prices.columns) == ["reliable", *OUTCOMES]
+    assert list(prices["reliable"]) == [True, False]
+    assert prices.loc[7, ["home", "draw", "away"]].sum() == pytest.approx(1.0)
+    assert prices.loc[9, list(OUTCOMES)].isna().all()

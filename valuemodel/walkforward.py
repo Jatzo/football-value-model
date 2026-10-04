@@ -2,27 +2,16 @@
 
 from collections.abc import Callable, Iterable
 
-import numpy as np
 import pandas as pd
 
 from valuemodel.config import MIN_TEAM_MATCHES, TRAINING_WINDOW_DAYS
-from valuemodel.markets import predict
+from valuemodel.data import MATCH_COLUMNS
+from valuemodel.markets import OUTCOMES, price_matches
 from valuemodel.models.common import FittedModel
 
 FitFunction = Callable[[pd.DataFrame, pd.Timestamp, float, int], FittedModel]
 AsOfRule = Callable[[pd.Series], pd.Series]
 
-FORECAST_COLUMNS: tuple[str, ...] = ("home", "draw", "away", "over25", "under25")
-MATCH_COLUMNS: tuple[str, ...] = (
-    "league",
-    "season",
-    "date",
-    "home_team",
-    "away_team",
-    "home_goals",
-    "away_goals",
-    "result",
-)
 
 # Days back from each weekday to the afternoon its pre-match odds were collected:
 # Friday for games from Friday to Monday, Tuesday for games from Tuesday to Thursday.
@@ -67,27 +56,8 @@ def walk_forward_forecasts(
         history = matches[matches["league"] == league]
         for as_of, group in league_targets.groupby(as_of_rule(league_targets["date"])):
             model = fit(history, as_of, xi, window_days)
-            frames.append(_price_group(model, group, as_of, min_matches))
+            prices = price_matches(model, group, min_matches).assign(as_of=as_of)
+            frames.append(group[[c for c in MATCH_COLUMNS if c in group]].join(prices))
     if not frames:
-        return pd.DataFrame(columns=["as_of", "reliable", *FORECAST_COLUMNS])
+        return pd.DataFrame(columns=["as_of", "reliable", *OUTCOMES])
     return pd.concat(frames).sort_index()
-
-
-def _price_group(
-    model: FittedModel, group: pd.DataFrame, as_of: pd.Timestamp, min_matches: int
-) -> pd.DataFrame:
-    rows = []
-    for match in group.itertuples():
-        reliable = model.is_reliable(match.home_team, min_matches) and model.is_reliable(
-            match.away_team, min_matches
-        )
-        prices = predict(model, match.home_team, match.away_team).__dict__ if reliable else {}
-        rows.append(
-            {
-                "as_of": as_of,
-                "reliable": reliable,
-                **{column: prices.get(column, np.nan) for column in FORECAST_COLUMNS},
-            }
-        )
-    forecasts = pd.DataFrame(rows, index=group.index)
-    return group[[column for column in MATCH_COLUMNS if column in group]].join(forecasts)

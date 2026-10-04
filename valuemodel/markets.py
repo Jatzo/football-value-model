@@ -1,8 +1,9 @@
 """Turn a scoreline probability matrix into market probabilities."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 
 import numpy as np
+import pandas as pd
 
 from valuemodel.models.common import FittedModel
 
@@ -15,9 +16,8 @@ class MarketProbabilities:
     over25: float
     under25: float
 
-    def fair_odds(self) -> dict[str, float]:
-        """Decimal odds with no margin, the price at which a bet breaks even."""
-        return {name: 1 / value for name, value in self.__dict__.items()}
+
+OUTCOMES: tuple[str, ...] = tuple(field.name for field in fields(MarketProbabilities))
 
 
 def market_probabilities(matrix: np.ndarray) -> MarketProbabilities:
@@ -36,3 +36,17 @@ def market_probabilities(matrix: np.ndarray) -> MarketProbabilities:
 
 def predict(model: FittedModel, home: str, away: str) -> MarketProbabilities:
     return market_probabilities(model.score_matrix(home, away))
+
+
+def price_matches(model: FittedModel, matches: pd.DataFrame, min_matches: int) -> pd.DataFrame:
+    """Probabilities for every outcome of each match, indexed like `matches`.
+
+    A match involving a team with fewer than min_matches results in the fit is
+    marked unreliable and left unpriced rather than given an extreme price.
+    """
+    rows = []
+    for home, away in zip(matches["home_team"], matches["away_team"], strict=True):
+        reliable = model.is_reliable(home, min_matches) and model.is_reliable(away, min_matches)
+        prices = asdict(predict(model, home, away)) if reliable else {}
+        rows.append({"reliable": reliable, **{o: prices.get(o, np.nan) for o in OUTCOMES}})
+    return pd.DataFrame(rows, index=matches.index, columns=["reliable", *OUTCOMES])

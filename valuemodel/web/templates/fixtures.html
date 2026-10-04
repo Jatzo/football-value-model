@@ -21,11 +21,14 @@
 <section class="empty">
   <h2>No fixtures for the leagues with cached results</h2>
   <p>
-    The current file only covers {{ view.unpriced_leagues | join(", ") }}, and none of them has cached results,
+    The current file only covers {{ view.unpriced_leagues | join(", ") }}, and none of them can be priced from the cached results,
     so there is nothing the model can price. The file is updated through the week, so check again closer to the next round.
   </p>
 </section>
 {% else %}
+  {% if not view.has_odds %}
+  <p class="panel">The fixtures file has no {{ bookmaker }} prices, so only the model's fair odds are shown. The data source does not publish Pinnacle odds for upcoming matches.</p>
+  {% endif %}
   {% for league in view.priced_leagues %}
   <section class="panel">
     <h2>{{ league | league }}</h2>
@@ -51,7 +54,7 @@
             <span class="edge {{ cell.edge | tone }}">{{ cell.edge | signed }}</span>
           </td>
           {% else %}
-          <td class="muted small" colspan="5">Not priced: a team has fewer than 10 matches in the training window</td>
+          <td class="muted small" colspan="5">Not priced: a team has fewer than {{ min_matches }} matches in the training window</td>
           {% endfor %}
         </tr>
         {% endfor %}
@@ -62,7 +65,9 @@
   </section>
   {% endfor %}
   {% if view.unpriced_leagues %}
-  <p class="muted small">Also in the file but not priced, because there are no cached results for them: {{ view.unpriced_leagues | join(", ") }}.</p>
+  <p class="muted small">Also in the file but not priced:
+    {% for league, reason in view.unpriced_leagues.items() %}{{ league }} ({{ reason }}){% if not loop.last %}, {% endif %}{% endfor %}.
+  </p>
   {% endif %}
 {% endif %}
 {% endblock %}

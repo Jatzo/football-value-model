@@ -291,7 +291,8 @@ class FixturesView:
     fetched: datetime | None = None
     rows: dict[str, list[FixtureRow]] = field(default_factory=dict)
     priced_leagues: list[str] = field(default_factory=list)
-    unpriced_leagues: list[str] = field(default_factory=list)
+    unpriced_leagues: dict[str, str] = field(default_factory=dict)
+    has_odds: bool = True
     latest_result: dict[str, str] = field(default_factory=dict)
 
 
@@ -309,7 +310,7 @@ def fixtures_view(settings: Settings) -> FixturesView:
         return FixturesView(
             status="no_history",
             fetched=fetched_at(path),
-            unpriced_leagues=list(dict.fromkeys(fixtures["league"])),
+            unpriced_leagues=dict.fromkeys(fixtures["league"], "no cached results"),
         )
     priced = price_fixtures(history, fixtures, settings, DEFAULT_XI)
     latest = {
@@ -321,5 +322,6 @@ def fixtures_view(settings: Settings) -> FixturesView:
         rows={league: fixture_rows(priced.fixtures, league) for league in priced.priced_leagues},
         priced_leagues=priced.priced_leagues,
         unpriced_leagues=priced.unpriced_leagues,
+        has_odds=bool(priced.fixtures.filter(like="odds_").notna().any().any()),
         latest_result=latest,
     )

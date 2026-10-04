@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from flask import Blueprint, Flask, abort, current_app, render_template, request
 
 from valuemodel.backtest import BacktestResult
-from valuemodel.config import BOOKMAKERS, LEAGUES, Settings, season_label
+from valuemodel.config import BOOKMAKERS, LEAGUES, MIN_TEAM_MATCHES, Settings, season_label
 from valuemodel.labels import (
     FORECASTER_LABELS,
     MARKET_LABELS,
@@ -72,7 +72,7 @@ def _render_run_page(template: str, **context: object) -> str:
     """Render a page for the selected run. Context values that are functions get the run."""
     result, run_id, runs = _selected_run()
     if result is None:
-        return render_template("no_runs.html", runs=runs, page=template)
+        return render_template("no_runs.html", runs=runs)
     settings = result.settings
     description = (
         f"Bets at {BOOKMAKERS[settings.bookmaker]} pre-match odds, "
@@ -121,13 +121,11 @@ def models() -> str:
 @pages.route("/fixtures")
 def fixtures() -> str:
     settings = _settings()
-    with _database() as connection:
-        runs = list_runs(connection).to_dict("records")
     return render_template(
         "fixtures.html",
         view=views.fixtures_view(settings),
         settings=settings,
         bookmaker=BOOKMAKERS[settings.bookmaker],
-        runs=runs,
-        run_id=None,
+        min_matches=MIN_TEAM_MATCHES,
+        run_id=request.args.get("run", type=int),
     )

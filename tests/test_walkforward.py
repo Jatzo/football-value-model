@@ -3,10 +3,10 @@ import pandas as pd
 import pytest
 from simulation import simulate_league, true_model
 
+from valuemodel.markets import OUTCOMES
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
 from valuemodel.walkforward import (
-    FORECAST_COLUMNS,
     odds_capture_date,
     walk_forward_forecasts,
     week_start,
@@ -66,7 +66,7 @@ def test_unreliable_matches_have_no_prices(league: pd.DataFrame) -> None:
         league, ["2324"], fit_poisson, 0.003, odds_capture_date, min_matches=10_000
     )
     assert not forecasts["reliable"].any()
-    assert forecasts[list(FORECAST_COLUMNS)].isna().all().all()
+    assert forecasts[list(OUTCOMES)].isna().all().all()
 
 
 def test_future_results_cannot_leak_into_forecasts(league: pd.DataFrame) -> None:
@@ -90,8 +90,8 @@ def test_future_results_cannot_leak_into_forecasts(league: pd.DataFrame) -> None
     made_by_cutoff = honest["as_of"] <= cutoff
     assert made_by_cutoff.sum() > 50
     pd.testing.assert_frame_equal(
-        honest.loc[made_by_cutoff, list(FORECAST_COLUMNS)],
-        leaked.loc[made_by_cutoff, list(FORECAST_COLUMNS)],
+        honest.loc[made_by_cutoff, list(OUTCOMES)],
+        leaked.loc[made_by_cutoff, list(OUTCOMES)],
     )
     later = honest.loc[~made_by_cutoff, "home"] - leaked.loc[~made_by_cutoff, "home"]
     assert later.abs().max() > 0.01

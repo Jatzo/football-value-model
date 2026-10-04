@@ -121,8 +121,9 @@ def test_pages_without_a_run(empty_client: FlaskClient, path: str) -> None:
     assert "No backtest has been run yet" in response.get_data(as_text=True)
 
 
-def test_fixtures_page_before_any_download(empty_client: FlaskClient) -> None:
+def test_fixtures_page_before_any_download(empty_client: FlaskClient, settings: Settings) -> None:
     html = empty_client.get("/fixtures").get_data(as_text=True)
+    assert not database_path(settings).exists()
     assert "No fixtures downloaded yet" in html
     assert "valuemodel fixtures" in html
 
@@ -173,7 +174,7 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert "Team 00 v Team 01" in html
     assert html.count('class="num price value"') >= 1
     assert "Not priced: a team has fewer than 10 matches" in html
-    assert "not priced, because there are no cached results for them: E2" in html
+    assert "E2 (no cached results)" in html
 
 
 def test_headline_cards_lead_with_closing_line_value(result: BacktestResult) -> None:

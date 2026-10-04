@@ -10,16 +10,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
-import numpy as np
 import pandas as pd
 
 from valuemodel.config import MIN_TEAM_MATCHES, Settings, current_season
 from valuemodel.data import MATCH_COLUMNS, ODDS_COLUMNS, download_csv, read_raw, standardise
-from valuemodel.markets import predict
-from valuemodel.models.common import FittedModel
+from valuemodel.markets import OUTCOMES, price_matches
 from valuemodel.models.dixon_coles import fit_dixon_coles
-from valuemodel.odds import find_value
-from valuemodel.walkforward import FORECAST_COLUMNS
+from valuemodel.odds import MARKETS, find_value
 
 FIXTURES_URL = "https://football-data.co.uk/fixtures.csv"
 
@@ -56,7 +53,7 @@ def load_fixtures(path: Path) -> pd.DataFrame:
 class PricedFixtures:
     fixtures: pd.DataFrame
     priced_leagues: list[str]
-    unpriced_leagues: list[str]
+    unpriced_leagues: dict[str, str]
 
 
 def price_fixtures(
@@ -71,48 +68,40 @@ def price_fixtures(
     Each league is fitted once, on all results before its earliest fixture.
     Model probabilities sit in columns such as `home`, the bookmaker's odds in
     `odds_home`, the edge in `edge_home`, and any value bet in `value_1x2` and
-    `value_totals`.
+    `value_totals`. Leagues that cannot be priced are returned with the reason.
     """
-    leagues = list(dict.fromkeys(fixtures["league"]))
     known = set(matches["league"])
-    priced = [league for league in leagues if league in known]
-    frames = []
-    for league in priced:
+    frames, priced, unpriced = [], [], {}
+    for league in dict.fromkeys(fixtures["league"]):
+        if league not in known:
+            unpriced[league] = "no cached results"
+            continue
         upcoming = fixtures[fixtures["league"] == league]
-        model = fit_dixon_coles(matches[matches["league"] == league], upcoming["date"].min(), xi)
-        frames.append(_price_league(model, upcoming, settings, min_matches))
+        history = matches[matches["league"] == league]
+        try:
+            model = fit_dixon_coles(history, upcoming["date"].min(), xi)
+        except (ValueError, RuntimeError) as error:
+            unpriced[league] = str(error)
+            continue
+        frames.append(_with_odds(upcoming, price_matches(model, upcoming, min_matches), settings))
+        priced.append(league)
     result = pd.concat(frames) if frames else fixtures.iloc[0:0]
-    return PricedFixtures(
-        fixtures=result,
-        priced_leagues=priced,
-        unpriced_leagues=[league for league in leagues if league not in known],
-    )
+    return PricedFixtures(fixtures=result, priced_leagues=priced, unpriced_leagues=unpriced)
 
 
-def _price_league(
-    model: FittedModel, upcoming: pd.DataFrame, settings: Settings, min_matches: int
-) -> pd.DataFrame:
-    rows = []
-    for fixture in upcoming.itertuples():
-        reliable = model.is_reliable(fixture.home_team, min_matches) and model.is_reliable(
-            fixture.away_team, min_matches
-        )
-        prices = predict(model, fixture.home_team, fixture.away_team).__dict__ if reliable else {}
-        rows.append({"reliable": reliable, **{c: prices.get(c, np.nan) for c in FORECAST_COLUMNS}})
-    forecasts = pd.DataFrame(rows, index=upcoming.index)
-    odds = upcoming[[f"{settings.bookmaker}_{outcome}" for outcome in FORECAST_COLUMNS]]
-    odds.columns = list(FORECAST_COLUMNS)
-
+def _with_odds(upcoming: pd.DataFrame, forecasts: pd.DataFrame, settings: Settings) -> pd.DataFrame:
+    """Add the bookmaker's odds, the edge on every outcome and any value bets."""
+    odds = upcoming[[f"{settings.bookmaker}_{outcome}" for outcome in OUTCOMES]]
+    odds.columns = list(OUTCOMES)
     priced = upcoming.join(forecasts)
-    for outcome in FORECAST_COLUMNS:
+    for outcome in OUTCOMES:
         priced[f"odds_{outcome}"] = odds[outcome]
         priced[f"edge_{outcome}"] = forecasts[outcome] * odds[outcome] - 1
+    reliable = forecasts["reliable"]
     bets = find_value(
-        forecasts.loc[forecasts["reliable"], list(FORECAST_COLUMNS)],
-        odds.loc[forecasts["reliable"]],
-        settings.edge_threshold,
+        forecasts.loc[reliable, list(OUTCOMES)], odds.loc[reliable], settings.edge_threshold
     )
-    for market in ("1x2", "totals"):
+    for market in MARKETS:
         chosen = bets[bets["market"] == market]["outcome"]
         priced[f"value_{market}"] = chosen.reindex(priced.index)
     return priced

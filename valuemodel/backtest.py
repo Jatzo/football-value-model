@@ -13,13 +13,13 @@ import numpy as np
 import pandas as pd
 
 from valuemodel.config import DEFAULT_XI, MIN_TEAM_MATCHES, TRAINING_WINDOW_DAYS, Settings
+from valuemodel.markets import OUTCOMES
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
 from valuemodel.odds import MARKETS, find_value, remove_margin
 from valuemodel.scoring import brier_score, log_loss, outcome_indices, ranked_probability_score
 from valuemodel.staking import stake
 from valuemodel.walkforward import (
-    FORECAST_COLUMNS,
     FitFunction,
     odds_capture_date,
     walk_forward_forecasts,
@@ -56,12 +56,12 @@ _BOOTSTRAP_SAMPLES = 2000
 
 
 def odds_columns(source: str) -> list[str]:
-    return [f"{source}_{outcome}" for outcome in FORECAST_COLUMNS]
+    return [f"{source}_{outcome}" for outcome in OUTCOMES]
 
 
 def market_forecasts(matches: pd.DataFrame, source: str, method: str) -> pd.DataFrame:
     """Margin-free probabilities from one source's odds, shaped like model forecasts."""
-    forecasts = pd.DataFrame(index=matches.index, columns=list(FORECAST_COLUMNS), dtype=float)
+    forecasts = pd.DataFrame(index=matches.index, columns=list(OUTCOMES), dtype=float)
     for outcomes in MARKETS.values():
         odds = matches[[f"{source}_{outcome}" for outcome in outcomes]].to_numpy()
         forecasts[list(outcomes)] = remove_margin(odds, method)
@@ -93,8 +93,8 @@ def place_bets(forecasts: pd.DataFrame, matches: pd.DataFrame, settings: Setting
     """
     priced = forecasts[forecasts["reliable"]]
     odds = matches.loc[priced.index, odds_columns(settings.bookmaker)]
-    odds.columns = list(FORECAST_COLUMNS)
-    candidates = find_value(priced[list(FORECAST_COLUMNS)], odds, settings.edge_threshold)
+    odds.columns = list(OUTCOMES)
+    candidates = find_value(priced[list(OUTCOMES)], odds, settings.edge_threshold)
     if candidates.empty:
         return pd.DataFrame(columns=list(BET_COLUMNS))
 

@@ -82,7 +82,7 @@ def test_price_fixtures(history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame])
     result = price_fixtures(history, fixtures, Settings(), xi=0.003)
 
     assert result.priced_leagues == ["E0"]
-    assert result.unpriced_leagues == ["E2"]
+    assert result.unpriced_leagues == {"E2": "no cached results"}
     priced = result.fixtures
     assert len(priced) == 7
     reliable = priced[priced["reliable"]]
@@ -106,4 +106,14 @@ def test_no_known_leagues(history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame
     history, fixtures = history_and_fixtures
     result = price_fixtures(history, fixtures.assign(league="SC1"), Settings(), xi=0.003)
     assert result.fixtures.empty
-    assert result.unpriced_leagues == ["SC1"]
+    assert result.unpriced_leagues == {"SC1": "no cached results"}
+
+
+def test_a_league_that_cannot_be_fitted_is_reported(
+    history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame],
+) -> None:
+    history, fixtures = history_and_fixtures
+    too_old = history.assign(date=history["date"] - pd.Timedelta(days=4000))
+    result = price_fixtures(too_old, fixtures, Settings(), xi=0.003)
+    assert result.priced_leagues == []
+    assert "No matches to fit" in result.unpriced_leagues["E0"]
