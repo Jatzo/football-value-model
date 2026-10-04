@@ -13,7 +13,11 @@ from valuemodel.labels import (
     MARKET_LABELS,
     OUTCOME_LABELS,
     STRATEGY_LABELS,
+    decimal_odds,
     label,
+    percent,
+    tone,
+    units,
 )
 from valuemodel.report import staking_description
 from valuemodel.store import connect, database_path, latest_run_id, list_runs, load_run
@@ -24,15 +28,11 @@ pages = Blueprint("pages", __name__)
 
 def register_filters(app: Flask) -> None:
     app.jinja_env.filters.update(
-        percent=lambda value: "n/a" if views.is_missing(value) else f"{value:.1%}",
-        signed=lambda value: "n/a" if views.is_missing(value) else f"{value:+.1%}",
-        units=lambda value: "n/a" if views.is_missing(value) else f"{value:,.2f}",
-        odds=lambda value: "" if views.is_missing(value) else f"{value:.2f}",
-        tone=lambda value: (
-            ""
-            if views.is_missing(value) or value == 0
-            else ("positive" if value > 0 else "negative")
-        ),
+        percent=percent,
+        signed=lambda value: percent(value, signed=True),
+        units=units,
+        odds=decimal_odds,
+        tone=tone,
         season=season_label,
         strategy=lambda name: label(STRATEGY_LABELS, name),
         outcome=lambda name: label(OUTCOME_LABELS, name),

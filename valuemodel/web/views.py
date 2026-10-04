@@ -13,15 +13,18 @@ from valuemodel.backtest import MODELS, BacktestResult
 from valuemodel.config import DEFAULT_SEASONS, DEFAULT_XI, LEAGUES, Settings, current_season
 from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
-from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, STRATEGY_LABELS, label
+from valuemodel.labels import (
+    MARKET_LABELS,
+    OUTCOME_LABELS,
+    STRATEGY_LABELS,
+    is_missing,
+    label,
+    tone,
+)
 
 PER_PAGE = 50
 
 MODEL_FORECASTERS = tuple(MODELS)
-
-
-def is_missing(value: object) -> bool:
-    return value is None or (isinstance(value, float) and math.isnan(value))
 
 
 @dataclass
@@ -30,12 +33,6 @@ class Card:
     value: str
     tone: str = ""
     note: str = ""
-
-
-def _tone(value: float) -> str:
-    if is_missing(value) or value == 0:
-        return ""
-    return "positive" if value > 0 else "negative"
 
 
 def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> list[Card]:
@@ -54,7 +51,7 @@ def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> lis
         Card(
             "Mean closing line value",
             f"{row['mean_clv']:+.1%}",
-            _tone(row["mean_clv"]),
+            tone(row["mean_clv"]),
             f"on {int(row['clv_bets']):,} bets with Pinnacle closing odds",
         ),
         Card(
@@ -62,17 +59,17 @@ def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> lis
             f"{row['beat_close_share']:.1%}",
             note="share of bets struck at a better price than the close",
         ),
-        Card("ROI", f"{row['roi']:+.1%}", _tone(row["roi"]), f"on {int(row['bets']):,} bets"),
+        Card("ROI", f"{row['roi']:+.1%}", tone(row["roi"]), f"on {int(row['bets']):,} bets"),
         Card(
             "Level-stakes ROI",
             f"{row['level_roi']:+.1%}",
-            _tone(row["level_roi"]),
+            tone(row["level_roi"]),
             f"95% interval {row['level_roi_low']:+.1%} to {row['level_roi_high']:+.1%}",
         ),
         Card(
             "Final bankroll",
             f"{row['final_bankroll']:,.0f}",
-            _tone(row["final_bankroll"] - start),
+            tone(row["final_bankroll"] - start),
             f"from {start:,.0f} units",
         ),
         Card(

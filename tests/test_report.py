@@ -5,7 +5,8 @@ from simulation import add_odds, simulate_league, true_model
 
 from valuemodel.backtest import BacktestResult, run_backtest
 from valuemodel.config import Settings
-from valuemodel.report import format_report, percent, staking_description, table
+from valuemodel.labels import percent, tone, units
+from valuemodel.report import format_report, staking_description, table
 
 
 def test_table_aligns_columns() -> None:
@@ -18,6 +19,18 @@ def test_percent() -> None:
     assert percent(-0.0642, signed=True) == "-6.4%"
     assert percent(0.05, signed=True) == "+5.0%"
     assert percent(float("nan")) == "n/a"
+    assert percent(None) == "n/a"
+
+
+def test_units_and_tone() -> None:
+    assert units(-876.7137) == "-876.71"
+    assert units(9166.3757) == "9,166.38"
+    assert (tone(0.02), tone(-0.02), tone(0.0), tone(float("nan"))) == (
+        "positive",
+        "negative",
+        "",
+        "",
+    )
 
 
 @pytest.mark.parametrize(

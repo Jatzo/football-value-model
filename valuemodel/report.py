@@ -1,13 +1,12 @@
 """Plain text report of a backtest, closing line value first."""
 
-import math
 from collections.abc import Sequence
 
 import pandas as pd
 
 from valuemodel.backtest import BacktestResult
 from valuemodel.config import BOOKMAKERS, Settings, season_label
-from valuemodel.labels import FORECASTER_LABELS, STRATEGY_LABELS, label
+from valuemodel.labels import FORECASTER_LABELS, STRATEGY_LABELS, label, percent, units
 
 Cell = str | int | float
 
@@ -23,16 +22,6 @@ def table(headers: Sequence[str], rows: Sequence[Sequence[Cell]]) -> str:
         ]
         lines.append("  ".join(cells).rstrip())
     return "\n".join(lines)
-
-
-def percent(value: float, signed: bool = False) -> str:
-    if value is None or (isinstance(value, float) and math.isnan(value)):
-        return "n/a"
-    return f"{value:+.1%}" if signed else f"{value:.1%}"
-
-
-def units(value: float) -> str:
-    return f"{value:,.2f}"
 
 
 def staking_description(settings: Settings) -> str:
