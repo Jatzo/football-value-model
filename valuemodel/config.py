@@ -49,7 +49,7 @@ STAKING_METHODS: tuple[str, ...] = ("kelly", "flat")
 # odds are left out because nobody can reliably get the best price everywhere.
 BOOKMAKERS: dict[str, str] = {"b365": "Bet365", "pinnacle": "Pinnacle"}
 
-USER_AGENT = "football-value-model (+https://github.com/Jatzo/footballbetfinder)"
+USER_AGENT = "football-value-model (+https://github.com/Jatzo/football-value-model)"
 
 _SEASON_PATTERN = re.compile(r"^\d{4}$")
 

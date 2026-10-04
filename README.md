@@ -52,8 +52,8 @@ Stakes are paper only. The default is quarter Kelly, a quarter of the stake the 
 You need Python 3.12 or later.
 
 ```bash
-git clone https://github.com/Jatzo/footballbetfinder.git
-cd footballbetfinder
+git clone https://github.com/Jatzo/football-value-model.git
+cd football-value-model
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"

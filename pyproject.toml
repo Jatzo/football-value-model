@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Jatzo/footballbetfinder"
+Repository = "https://github.com/Jatzo/football-value-model"
 
 [project.optional-dependencies]
 dev = [
