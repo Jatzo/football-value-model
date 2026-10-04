@@ -6,7 +6,7 @@ A Dixon-Coles model that prices football matches, compares its prices with bookm
 
 ## Results in brief
 
-The model does not beat the market. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,413 paper bets at Bet365's pre-match prices. On average those prices were 6.4% worse than Pinnacle's closing line, only one bet in five beat the close, and the bankroll fell from 1,000 to 123 units. The models are well calibrated, but the bookmakers' own prices are better forecasts. The full method and figures are in [Backtest](#backtest).
+The model does not beat the market. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,413 paper bets at Bet365's pre-match prices. On average those prices were 6.4% worse than Pinnacle's closing line, only one bet in five beat the close, and the bankroll fell from 1,000 to 123 units. The models are well calibrated, but the bookmakers' own prices are better forecasts. A third model that also learns from shots forecasts better than the other two and lost less, but its prices were no better against the close, so it does not beat the market either. The full method and figures are in [Backtest](#backtest).
 
 ## How the model works
 
@@ -38,6 +38,22 @@ For each candidate `xi`, the model walked through 2021/22 and 2022/23 on exactly
 | 0.005 | 0.97848 | 0.20238 |
 
 Both scores are lowest at 0.003, so a match from about 230 days ago counts half as much as one played today. The Poisson baseline gives the same answer, and anything from about 0.0025 to 0.004 would give very similar forecasts. `valuemodel tune-xi` reproduces the table.
+
+### Shot-based expected goals
+
+Goals are noisy: a side can dominate a match and lose it. Shots carry extra evidence about how strong each team is. football-data.co.uk records shots and shots on target, but not where or how each shot was taken, so these are not true expected goals. Instead, each shot on target and each other shot is worth the average number of goals that kind of shot led to in the training window. In recent Premier League seasons that is about 0.3 goals per shot on target and nothing for other shots. The values are kept non-negative, since otherwise a side with shots but none on target could be expected to score fewer than zero goals.
+
+The shots-adjusted model fits each team's strengths to a blend of actual goals and these expected goals. The share of expected goals in the blend was chosen on the same tuning seasons as `xi`, and `valuemodel tune-shots` reproduces the table:
+
+| Share of expected goals | Log loss | Ranked probability score |
+| --- | --- | --- |
+| 0 (actual goals only) | 0.97521 | 0.20187 |
+| 0.25 | 0.97173 | 0.20089 |
+| 0.5 | 0.97100 | 0.20065 |
+| 0.75 | 0.97297 | 0.20124 |
+| 1 (expected goals only) | 0.97768 | 0.20274 |
+
+An even blend forecasts best: shots add information, but actual goals still matter. The Dixon-Coles correction only applies to whole-number scores, so it has nothing to act on with a blend, and this model is fitted as Poisson.
 
 ### Finding value and staking
 
@@ -85,7 +101,7 @@ valuemodel fixtures
 flask --app valuemodel.web run
 ```
 
-Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page prices upcoming matches next to Bet365's odds and highlights value.
+Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. The bets page can also be ordered by the model's chance of each bet winning.
 
 The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file and refreshes this season's results. That file covers many leagues and changes through the week, and the model can only price leagues it has results for. Charts use Chart.js from a CDN, so they need an internet connection.
 
@@ -103,9 +119,9 @@ GitHub Actions runs the same checks on every push and pull request. The code is 
 | --- | --- |
 | `cli.py`, `config.py` | The `valuemodel` command, settings, leagues and seasons |
 | `data.py`, `teams.py`, `fixtures.py` | Downloading, caching, cleaning and standardising results, odds and upcoming fixtures |
-| `models/` | Poisson and Dixon-Coles models with time decay |
+| `models/`, `expected_goals.py` | Poisson, Dixon-Coles and shots-adjusted models with time decay, and shot-based expected goals |
 | `markets.py`, `odds.py`, `staking.py` | Market probabilities, margin removal, value detection and stakes |
-| `walkforward.py`, `tuning.py`, `backtest.py` | Walk-forward forecasting, choosing `xi`, and the backtest metrics |
+| `walkforward.py`, `tuning.py`, `backtest.py` | Walk-forward forecasting, choosing settings, and the backtest metrics |
 | `store.py`, `report.py`, `labels.py`, `web/` | SQLite storage, the text report, shared display formats and the dashboard |
 
 ## Configuration
@@ -133,7 +149,7 @@ The backtest walks through 2023/24, 2024/25 and 2025/26 in date order. Before ea
 
 Bets are struck at Bet365's pre-match price whenever the edge reaches 3%, with quarter Kelly stakes capped at 2% of the bankroll. All stakes on one day are sized from that morning's bankroll. Games involving a team with fewer than 10 matches in the training window are skipped.
 
-Three strategies are compared: Dixon-Coles, the Poisson baseline, and following the market. The last treats Pinnacle's pre-match prices, with the margin removed, as its forecast, and bets whenever Bet365 offers at least 3% more.
+Four strategies are compared: Dixon-Coles, the Poisson baseline, the shots-adjusted model, and following the market. The last treats Pinnacle's pre-match prices, with the margin removed, as its forecast, and bets whenever Bet365 offers at least 3% more.
 
 ### Closing line value
 
@@ -143,6 +159,7 @@ Closing line value (CLV) compares the price taken with Pinnacle's closing price 
 | --- | --- | --- | --- | --- |
 | Dixon-Coles | 1,413 | 1,205 | -6.4% | 19.8% |
 | Poisson | 1,428 | 1,212 | -6.5% | 19.6% |
+| Shots-adjusted | 1,331 | 1,110 | -7.0% | 20.1% |
 | Follow the market | 7 | 7 | -4.4% | 57.1% |
 
 For context, backing every Bet365 price in these seasons without any model gives a mean CLV of between -4.9% and -8.6%, depending on the outcome. The model's selections are no better than that. It finds prices where it disagrees with the market, and the market turns out to be right more often than not. Pinnacle's odds are missing from 17 January 2026 onwards, which is why about 15% of bets have no closing price to compare with.
@@ -153,9 +170,10 @@ For context, backing every Bet365 price in these seasons without any model gives
 | --- | --- | --- | --- | --- | --- | --- |
 | Dixon-Coles | 1,413 | 9,166 | -877 | -9.6% | 91% | -8.3% (-15.4% to -1.0%) |
 | Poisson | 1,428 | 9,086 | -877 | -9.6% | 92% | -10.1% (-17.1% to -3.0%) |
+| Shots-adjusted | 1,331 | 9,467 | -664 | -7.0% | 77% | -5.9% (-14.5% to +2.6%) |
 | Follow the market | 7 | 21 | +17 | +79.3% | 1% | +125% (-43% to +350%) |
 
-Starting from 1,000 units, both models finished with about 123. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets, and for both models it sits entirely below zero. The market strategy found only seven bets, too few to mean anything, which itself shows how rarely Bet365 is 3% more generous than Pinnacle.
+Starting from 1,000 units, Dixon-Coles and Poisson finished with about 123 and the shots-adjusted model with 336. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets. For Dixon-Coles and Poisson it sits entirely below zero. For the shots-adjusted model it just reaches above zero, but its closing line value is no better, so the smaller loss is most likely luck rather than a real edge. The market strategy found only seven bets, too few to mean anything, which itself shows how rarely Bet365 is 3% more generous than Pinnacle.
 
 ### Model quality
 
@@ -165,10 +183,24 @@ Scored on the 940 matches that every forecaster priced. Lower is better for all 
 | --- | --- | --- | --- |
 | Dixon-Coles | 0.9617 | 0.1966 | 0.5708 |
 | Poisson | 0.9622 | 0.1967 | 0.5711 |
+| Shots-adjusted | 0.9603 | 0.1959 | 0.5694 |
 | Bet365 pre-match, margin removed | 0.9480 | 0.1923 | 0.5623 |
 | Pinnacle closing, margin removed | 0.9429 | 0.1907 | 0.5582 |
 
-The models are well calibrated: when Dixon-Coles gives an outcome a 25% chance, it happens about 26% of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses.
+The models are well calibrated: when Dixon-Coles gives an outcome a 25% chance, it happens about 26% of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses. Adding shots narrows it a little, as the shots-adjusted model shows on seasons it was never tuned on, but not by enough.
+
+### Bets by the model's chance of winning
+
+The bets each model was surest about win most often, but at short odds. For Dixon-Coles:
+
+| Model's chance | Bets | Average chance | Won | Level-stakes ROI |
+| --- | --- | --- | --- | --- |
+| Under 30% | 330 | 21.8% | 17.6% | -11.7% |
+| 30% to 45% | 351 | 37.8% | 29.9% | -6.8% |
+| 45% to 60% | 457 | 52.6% | 44.4% | -5.0% |
+| Over 60% | 275 | 67.4% | 53.1% | -11.5% |
+
+In every band the bets won less often than the model expected, and the bets it was most confident about did no better than the rest. That is a selection effect: value bets are chosen where the model disagrees with the market, and on exactly those matches the model is overconfident. The shots-adjusted model's 30% to 45% band happened to make money, but picking out one profitable band after the event is how backtests mislead, so it is not treated as a finding.
 
 ## Limitations
 
@@ -197,7 +229,7 @@ MIT. See [LICENSE](LICENSE).
 | Area | Skills used in this project |
 | --- | --- |
 | Python | Python 3.12, type hints throughout, dataclasses, generics, packaging with `pyproject.toml` and a console script |
-| Statistical modelling | Poisson regression, the Dixon-Coles model, maximum likelihood estimation with analytic gradients, L-BFGS-B optimisation with SciPy, identifiability constraints, exponential time decay |
+| Statistical modelling | Poisson regression, the Dixon-Coles model, maximum likelihood estimation with analytic gradients, L-BFGS-B optimisation with SciPy, identifiability constraints, exponential time decay, shot-based expected goals with non-negative least squares |
 | Model evaluation | Walk-forward validation, choosing a hyperparameter on held-out seasons, log loss, Brier score, ranked probability score, calibration analysis, bootstrap confidence intervals |
 | Betting maths | Implied probabilities, margin removal by the proportional and power methods, expected value, fractional Kelly staking with a cap, closing line value, drawdown and losing run analysis |
 | Backtesting | Point-in-time refitting with no lookahead, separate tuning and test periods, realistic odds timing, comparison against simple baselines |
