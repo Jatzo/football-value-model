@@ -124,6 +124,8 @@ valuemodel picks
 
 `valuemodel slips` suggests the best single, double and treble that can be built from those paper bets: for each size, the combination of value bets from different matches with the highest combined edge, with a paper stake at its combined odds. The three are shown side by side rather than ranked, because when every leg has an edge, adding legs always raises the combined edge while cutting the chance of winning, so the biggest accumulator would always come out on top.
 
+Value slips need odds, so they only appear once the fixtures file lists the round. Before that, `valuemodel slips` and the fixtures page offer the likeliest single, double and treble from the next round of each league: each match's likeliest outcome, the most likely first, with the model's chance, its fair odds and the lowest Bet365 odds that would make the slip a value bet. These are often over or under 2.5 goals, because few match results reach a 60% chance. Loading one into the bet slip leaves the odds for you to type in from the bookmaker.
+
 ### Dashboard
 
 ```bash

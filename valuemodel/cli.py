@@ -436,32 +436,53 @@ def run_picks(today: date | None = None) -> int:
     return 0
 
 
-def run_slips() -> int:
+def run_slips(today: date | None = None) -> int:
     settings = load_settings()
+    today = today or date.today()
     bookmaker = BOOKMAKERS[settings.bookmaker]
     fixtures = views.fixtures_view(settings)
     if fixtures.status == "missing":
         raise FileNotFoundError("No fixtures downloaded yet. Run: valuemodel fixtures")
-    if not fixtures.slips:
-        print(f"No suggested slips: no listed game has a value bet at {bookmaker}'s current odds.")
-        return 0
-    for slip in fixtures.slips:
+    if fixtures.slips:
+        print(f"Value slips at {bookmaker} odds, one leg per match\n")
+        for slip in fixtures.slips:
+            print(
+                f"{slip['name']}: odds {slip['odds']:.2f}, model chance {slip['probability']:.1%}, "
+                f"edge {slip['edge']:+.1%}, paper stake {slip['stake']:.2f}, "
+                f"returns {slip['returns']:.2f}"
+            )
+            for leg in slip["legs"]:
+                print(
+                    f"  {leg['match']}: {leg['bet']} at {leg['odds']:.2f}, "
+                    f"model chance {leg['chance']:.1%}"
+                )
+            print()
         print(
-            f"{slip['name']}: odds {slip['odds']:.2f}, model chance {slip['probability']:.1%}, "
-            f"edge {slip['edge']:+.1%}, paper stake {slip['stake']:.2f}, "
-            f"returns {slip['returns']:.2f}"
+            f"Stakes are {staking_description(settings)} on a "
+            f"{settings.starting_bankroll:g} unit bankroll.\n"
+        )
+    else:
+        print(f"No value slips: no listed game has a value bet at {bookmaker}'s current odds.\n")
+
+    schedule = views.schedule_view(settings, rounds=1, today=today)
+    likely = views.likely_slip_cards(schedule, settings.edge_threshold)
+    if likely:
+        print("Likeliest slips for the next round, which need no odds\n")
+    for slip in likely:
+        print(
+            f"{slip['name']}: model chance {slip['probability']:.1%}, "
+            f"fair odds {slip['fair_odds']:.2f}, value from {slip['price_to_beat']:.2f}"
         )
         for leg in slip["legs"]:
             print(
-                f"  {leg['match']}: {leg['bet']} at {leg['odds']:.2f}, "
-                f"model chance {leg['chance']:.1%}"
+                f"  {leg['match']}: {leg['bet']}, model chance {leg['chance']:.1%}, "
+                f"value from {leg['price_to_beat']:.2f}"
             )
         print()
     print(
-        f"Legs are value bets at {bookmaker} odds, one per match. Stakes are "
-        f"{staking_description(settings)} on a {settings.starting_bankroll:g} unit bankroll.\n"
-        "Each extra leg raises the edge but multiplies the model's errors. In the backtests,\n"
-        "single bets chosen this way lost money, so treat these as a test of the model."
+        f"Value from is the lowest {bookmaker} odds that would make a slip a value bet.\n"
+        "Each extra leg multiplies the model's errors, and in the backtests single bets chosen\n"
+        "by edge lost money, so treat these as a test of the model."
     )
     return 0
 

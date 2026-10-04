@@ -348,20 +348,49 @@ def test_slips_prints_each_suggested_slip(
     clean_environment.setattr(
         cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok", slips=[slip])
     )
+    no_schedule(clean_environment)
     assert cli.main(["slips"]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == (
+    assert lines[0] == "Value slips at Bet365 odds, one leg per match"
+    assert lines[2] == (
         "Best single: odds 2.00, model chance 60.0%, edge +20.0%, paper stake 20.00, returns 40.00"
     )
-    assert lines[1] == "  Sat 10 Oct 12:30, Arsenal v Leeds: Home win at 2.00, model chance 60.0%"
+    assert lines[3] == "  Sat 10 Oct 12:30, Arsenal v Leeds: Home win at 2.00, model chance 60.0%"
+    assert "Likeliest slips" not in "\n".join(lines)
 
 
-def test_slips_says_when_there_are_none(
+def no_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli.views, "schedule_view", lambda *_, **__: views.ScheduleView(rounds=1))
+
+
+def test_slips_without_odds_offers_the_likeliest_slips(
     clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    leg = {
+        "key": "k",
+        "match": "Sat 10 Oct 12:30, Arsenal v Leeds",
+        "bet": "Under 2.5",
+        "odds": None,
+        "chance": 0.624,
+        "price_to_beat": 1.65,
+    }
+    likely = {
+        "name": "Likeliest single",
+        "legs": [leg],
+        "probability": 0.624,
+        "fair_odds": 1.6,
+        "price_to_beat": 1.65,
+    }
     clean_environment.setattr(cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok"))
+    no_schedule(clean_environment)
+    clean_environment.setattr(cli.views, "likely_slip_cards", lambda *_: [likely])
     assert cli.main(["slips"]) == 0
-    assert "No suggested slips" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "No value slips: no listed game has a value bet at Bet365's current odds." in out
+    assert "Likeliest single: model chance 62.4%, fair odds 1.60, value from 1.65" in out
+    assert (
+        "  Sat 10 Oct 12:30, Arsenal v Leeds: Under 2.5, model chance 62.4%, value from 1.65" in out
+    )
 
 
 def test_slips_needs_the_fixtures_file(
