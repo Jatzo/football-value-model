@@ -6,7 +6,7 @@ A football model that prices matches from goals and shots, compares its prices w
 
 ## Results in brief
 
-The model does not beat the market. The main model learns team strengths from both goals and shot-based expected goals. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,369 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line, fewer than one bet in five beat the close, and the bankroll fell from 1,000 to 270 units. It forecasts slightly better than a classic Dixon-Coles model fitted to goals alone and is well calibrated, but the bookmakers' own prices are better forecasts still. The same holds in the Championship, where shots help more but the model still has no edge. The full method and figures are in [Backtest](#backtest).
+The model does not beat the market. The main model learns team strengths from both goals and shot-based expected goals. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,407 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line, only one bet in five beat the close, and the bankroll fell from 1,000 to 151 units. It forecasts slightly better than a classic Dixon-Coles model fitted to goals alone and is well calibrated, but the bookmakers' own prices are better forecasts still. The same holds in the Championship, where shots help more but the model still has no edge. Teams keep their ratings when they move between divisions, so promoted and relegated sides are priced from their first game. The full method and figures are in [Backtest](#backtest).
 
 ## How the model works
 
@@ -59,6 +59,23 @@ The main model, called shots-adjusted, fits each team's strengths to a blend of 
 
 Wider searches found nothing better, and fitting goals only or expected goals only was clearly worse (ranked probability scores of 0.2023 and 0.2014 at an `xi` of 0.005). A 60% share of expected goals and an `xi` of 0.006 forecast best, so a match about 115 days old counts half as much as one played today. Shots are less noisy than goals, so recent matches can safely count for more than in the goal-only models. `valuemodel tune-xi` and `valuemodel tune-shots` reproduce the search one setting at a time. The Dixon-Coles correction only applies to whole-number scores, so it has nothing to act on with a blend, and this model is fitted as Poisson.
 
+### Teams that change division
+
+Every season three teams are promoted to the Premier League and three are relegated from it. A model fitted on one league knows nothing about a promoted side, so it used to skip that team's first 10 games. Instead, each league is now fitted together with the division below it, and the Championship with League One as well. The two divisions never play each other, but the six teams that move between them each season put every team on one scale, so a promoted side starts with the ratings it earned in the Championship. League One is downloaded only for this purpose. Its own matches are never priced, because the model was never tuned or tested on them.
+
+The linked leagues share one home advantage. From 2019/20 to 2025/26 it was 0.19 in the Premier League, 0.21 in the Championship and 0.22 in League One (the log of home goals over away goals), while it ranged from 0.06 to 0.29 between seasons of the same league.
+
+This was checked on the tuning seasons before it was adopted, comparing the main model fitted on one league with the linked fit:
+
+| 2021/22 and 2022/23 | Premier League | Championship |
+| --- | --- | --- |
+| Ranked probability score where both priced, one league | 0.1996 | 0.2224 |
+| Same matches, linked | 0.1980 | 0.2216 |
+| Newly priced matches, linked | 0.2136 (20 matches) | 0.2147 (49 matches) |
+| Same new matches, Pinnacle's closing odds | 0.2224 | 0.2150 |
+
+The linked fit forecast better on the matches both versions priced, and about as well as the closing odds on the matches only it could price. Teams new to a league won slightly fewer points than it expected (0.97 a game against 0.98 in the Premier League, 1.40 against 1.42 in the Championship), no worse than the market did, so no correction for promoted teams was added. `--single-league` on `valuemodel backtest`, `tune-xi` and `tune-shots` fits one league alone, for comparison.
+
 ### Finding value and staking
 
 A bookmaker's odds imply a probability of `1 / odds` for each outcome. Those probabilities add up to more than 1, and the excess is the bookmaker's margin. When the market is used as a forecast, the margin is removed with either the proportional method, which scales every outcome down by the same factor, or the power method, which raises every implied probability to the same exponent and so takes more off longshots. Bookmakers tend to load their margin onto unlikely outcomes, so the power method is the default.
@@ -83,7 +100,7 @@ pytest
 
 On Windows, activate the environment with `.venv\Scripts\activate` instead.
 
-`valuemodel download` fetches the Premier League from 2019/20 to 2025/26, waiting a couple of seconds between files, and caches them in `data/raw/` so later runs do not touch the network. Use `--leagues`, `--seasons` and `--refresh` to change what is fetched.
+`valuemodel download` fetches the Premier League and the Championship from 2019/20 to 2025/26, waiting a couple of seconds between files, and caches them in `data/raw/` so later runs do not touch the network. Use `--leagues`, `--seasons` and `--refresh` to change what is fetched. A Championship backtest also needs League One: `valuemodel download --leagues E2`.
 
 Run the backtest, which prints the report below and saves the run to `data/valuemodel.sqlite`:
 
@@ -151,7 +168,7 @@ Settings come from environment variables. Copy `.env.example` to `.env` to chang
 
 The backtest walks through 2023/24, 2024/25 and 2025/26 in date order. Before each round of matches the model is refitted using only results that were known when the bookmaker's odds were collected. The data source collects pre-match odds on Friday afternoon for games from Friday to Monday, and on Tuesday afternoon for games from Tuesday to Thursday, so a Sunday match is priced from results up to the Thursday before it, never from Saturday's games. A test rewrites every result after a cutoff date and checks that no forecast made before the cutoff changes.
 
-Bets are struck at Bet365's pre-match price whenever the edge reaches 3%, with quarter Kelly stakes capped at 2% of the bankroll. All stakes on one day are sized from that morning's bankroll. Games involving a team with fewer than 10 matches in the training window are skipped.
+Bets are struck at Bet365's pre-match price whenever the edge reaches 3%, with quarter Kelly stakes capped at 2% of the bankroll. All stakes on one day are sized from that morning's bankroll. Every model is fitted on the league's linked divisions as described above. Games involving a team with fewer than 10 matches in the training window, in any linked league, are skipped.
 
 Four strategies are compared: the main shots-adjusted model, Dixon-Coles, the Poisson baseline, and following the market. The last treats Pinnacle's pre-match prices, with the margin removed, as its forecast, and bets whenever Bet365 offers at least 3% more.
 
@@ -161,37 +178,37 @@ Closing line value (CLV) compares the price taken with Pinnacle's closing price 
 
 | Strategy | Bets | Bets with closing odds | Mean CLV | Beat the close |
 | --- | --- | --- | --- | --- |
-| Shots-adjusted | 1,369 | 1,138 | -6.8% | 19.0% |
-| Dixon-Coles | 1,413 | 1,205 | -6.4% | 19.8% |
-| Poisson | 1,428 | 1,212 | -6.5% | 19.6% |
+| Shots-adjusted | 1,407 | 1,168 | -6.8% | 20.2% |
+| Dixon-Coles | 1,389 | 1,178 | -6.3% | 20.6% |
+| Poisson | 1,397 | 1,186 | -6.3% | 20.6% |
 | Follow the market | 7 | 7 | -4.4% | 57.1% |
 
-For context, backing every Bet365 price in these seasons without any model gives a mean CLV of between -4.9% and -8.6%, depending on the outcome. The model's selections are no better than that. It finds prices where it disagrees with the market, and the market turns out to be right more often than not. Pinnacle's odds are missing from 17 January 2026 onwards, which is why about 15% of bets have no closing price to compare with.
+For context, backing every Bet365 price in these seasons without any model gives a mean CLV of between -4.9% and -8.6%, depending on the outcome. The model's selections are no better than that. It finds prices where it disagrees with the market, and the market turns out to be right more often than not. Pinnacle's odds are missing from 17 January 2026 onwards, which is why about 17% of bets have no closing price to compare with.
 
 ### Betting results
 
 | Strategy | Bets | Staked | Profit | ROI | Max drawdown | Level-stakes ROI (95% interval) |
 | --- | --- | --- | --- | --- | --- | --- |
-| Shots-adjusted | 1,369 | 10,840 | -730 | -6.7% | 81% | -7.1% (-15.4% to +1.2%) |
-| Dixon-Coles | 1,413 | 9,166 | -877 | -9.6% | 91% | -8.3% (-15.4% to -1.0%) |
-| Poisson | 1,428 | 9,086 | -877 | -9.6% | 92% | -10.1% (-17.1% to -3.0%) |
+| Shots-adjusted | 1,407 | 7,364 | -849 | -11.5% | 88% | -7.4% (-15.4% to +0.6%) |
+| Dixon-Coles | 1,389 | 6,855 | -932 | -13.6% | 95% | -10.6% (-17.3% to -3.1%) |
+| Poisson | 1,397 | 7,316 | -924 | -12.6% | 94% | -10.2% (-17.2% to -2.7%) |
 | Follow the market | 7 | 21 | +17 | +79.3% | 1% | +125% (-43% to +350%) |
 
-Starting from 1,000 units, the main model finished with 270, and Dixon-Coles and Poisson with about 123. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets. For Dixon-Coles and Poisson it sits entirely below zero. For the main model it just reaches above zero, but its closing line value is no better, so the smaller loss is most likely luck rather than a real edge. The market strategy found only seven bets, too few to mean anything, which itself shows how rarely Bet365 is 3% more generous than Pinnacle.
+Starting from 1,000 units, the main model finished with 151, Dixon-Coles with 68 and Poisson with 76. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets. For Dixon-Coles and Poisson it sits entirely below zero. For the main model it just reaches above zero, but its closing line value is no better, so the smaller loss is most likely luck rather than a real edge. The market strategy found only seven bets, too few to mean anything, which itself shows how rarely Bet365 is 3% more generous than Pinnacle.
 
 ### Model quality
 
-Scored on the 940 matches that every forecaster priced. Lower is better for all three scores.
+Scored on the 970 matches that every forecaster priced. Lower is better for all three scores.
 
 | Forecaster | Log loss | Ranked probability score | Brier |
 | --- | --- | --- | --- |
-| Shots-adjusted | 0.9617 | 0.1962 | 0.5703 |
-| Dixon-Coles | 0.9617 | 0.1966 | 0.5708 |
-| Poisson | 0.9622 | 0.1967 | 0.5711 |
-| Bet365 pre-match, margin removed | 0.9480 | 0.1923 | 0.5623 |
-| Pinnacle closing, margin removed | 0.9429 | 0.1907 | 0.5582 |
+| Shots-adjusted | 0.9665 | 0.1972 | 0.5737 |
+| Dixon-Coles | 0.9684 | 0.1981 | 0.5756 |
+| Poisson | 0.9686 | 0.1981 | 0.5758 |
+| Bet365 pre-match, margin removed | 0.9499 | 0.1922 | 0.5635 |
+| Pinnacle closing, margin removed | 0.9441 | 0.1905 | 0.5590 |
 
-The models are well calibrated: when the main model gives an outcome a 25% chance, it happens about a quarter of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses. Adding shots narrows it only slightly: on seasons it was never tuned on, the main model beats Dixon-Coles on ranked probability and Brier scores and ties it on log loss. Its tuned settings did a little worse here than the even blend first tried (a ranked probability score of 0.1962 against 0.1959). That is a normal cost of tuning on limited data, and the tuned settings are kept, since switching after seeing these results would mean tuning on the test seasons.
+The models are well calibrated: when the main model gives an outcome a 25% chance, it happens about a quarter of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses. Adding shots narrows it only slightly: on seasons it was never tuned on, the main model beats Dixon-Coles on all three scores. Its tuned shot settings did a little worse on these seasons than the even blend first tried. That is a normal cost of tuning on limited data, and the tuned settings are kept, since switching after seeing these results would mean tuning on the test seasons.
 
 ### Bets by the model's chance of winning
 
@@ -199,35 +216,48 @@ The bets each model was surest about win most often, but at short odds. For the 
 
 | Model's chance | Bets | Average chance | Won | Level-stakes ROI |
 | --- | --- | --- | --- | --- |
-| Under 30% | 407 | 21.0% | 14.7% | -16.4% |
-| 30% to 45% | 399 | 37.5% | 33.1% | +3.4% |
-| 45% to 60% | 415 | 52.2% | 43.6% | -7.0% |
-| Over 60% | 148 | 66.9% | 54.1% | -10.3% |
+| Under 30% | 429 | 20.7% | 14.7% | -16.5% |
+| 30% to 45% | 403 | 37.8% | 34.2% | +5.9% |
+| 45% to 60% | 444 | 52.3% | 42.8% | -9.2% |
+| Over 60% | 131 | 65.7% | 52.7% | -12.7% |
 
 In every band the bets won less often than the model expected, and the bets it was most confident about did no better than the rest. That is a selection effect: value bets are chosen where the model disagrees with the market, and on exactly those matches the model is overconfident. The 30% to 45% band happened to make money, but picking out one profitable band after the event is how backtests mislead, so it is not treated as a finding.
 
+### Teams that change division, on the backtest seasons
+
+The same comparison on the backtest seasons went the other way, slightly:
+
+| 2023/24 to 2025/26 | Premier League | Championship |
+| --- | --- | --- |
+| Ranked probability score where both priced, one league | 0.1962 | 0.2155 |
+| Same matches, linked | 0.1969 | 0.2162 |
+| Newly priced matches, linked | 0.2046 (30 matches) | 0.1982 (84 matches) |
+| Same new matches, Pinnacle's closing odds | 0.1854 | 0.2001 |
+
+Most of the difference comes from promoted Premier League sides. Seven of the nine promoted in these seasons went straight back down, and they won 0.65 points a game against the 0.87 the linked model expected. The market expected 0.82, so it overrated them too, but less. Promoted teams often look stronger on their Championship form than they prove to be. The linked fit is kept, because it was chosen on the tuning seasons, and switching after seeing these results would mean tuning on the test seasons. A correction for promoted teams would need more seasons than these three to estimate fairly.
+
 ### Championship
 
-The same backtest was run on the Championship, with every setting left exactly as tuned on the Premier League. The model never saw Championship data while its settings were chosen, which makes this a clean out-of-sample test. To reproduce it, run `valuemodel download --leagues E1` and then `valuemodel backtest --league E1`.
+The same backtest was run on the Championship, with every setting left exactly as tuned on the Premier League. The model never saw Championship data while its settings were chosen, which makes this a clean out-of-sample test. To reproduce it, run `valuemodel download --leagues E1 E2` and then `valuemodel backtest --league E1`.
 
 ![Dashboard summary page for the Championship backtest](docs/screenshot-championship.png)
 
 | Strategy | Bets | Mean CLV | Beat the close | ROI | Final bankroll | Level-stakes ROI (95% interval) |
 | --- | --- | --- | --- | --- | --- | --- |
-| Shots-adjusted | 1,779 | -5.6% | 19.3% | -4.9% | 154 | -3.5% (-10.0% to +3.0%) |
-| Dixon-Coles | 1,940 | -6.0% | 17.6% | -11.0% | 43 | -8.7% (-14.1% to -2.8%) |
-| Poisson | 1,944 | -6.1% | 17.2% | -10.7% | 46 | -8.5% (-14.2% to -2.5%) |
+| Shots-adjusted | 1,722 | -6.0% | 19.8% | -6.0% | 141 | -6.4% (-12.8% to +0.3%) |
+| Dixon-Coles | 1,883 | -6.0% | 18.8% | -14.0% | 29 | -10.2% (-16.1% to -4.2%) |
+| Poisson | 1,892 | -6.1% | 18.7% | -14.1% | 26 | -10.9% (-17.0% to -4.5%) |
 | Follow the market | 23 | +2.1% | 65.2% | +20.2% | 1,023 | +46.6% (-42.4% to +156.1%) |
 
 | Forecaster | Log loss | Ranked probability score | Brier |
 | --- | --- | --- | --- |
-| Shots-adjusted | 1.0349 | 0.2155 | 0.6227 |
-| Dixon-Coles | 1.0419 | 0.2178 | 0.6275 |
-| Poisson | 1.0416 | 0.2178 | 0.6273 |
-| Bet365 pre-match, margin removed | 1.0296 | 0.2139 | 0.6184 |
-| Pinnacle closing, margin removed | 1.0256 | 0.2128 | 0.6157 |
+| Shots-adjusted | 1.0340 | 0.2151 | 0.6218 |
+| Dixon-Coles | 1.0392 | 0.2170 | 0.6256 |
+| Poisson | 1.0393 | 0.2170 | 0.6256 |
+| Bet365 pre-match, margin removed | 1.0286 | 0.2133 | 0.6180 |
+| Pinnacle closing, margin removed | 1.0242 | 0.2120 | 0.6149 |
 
-Shots help more here than in the Premier League. The main model beats Dixon-Coles on all three scores, by 0.0023 in ranked probability score against 0.0004 in the Premier League, and its forecasts come closer to Bet365's. The Championship market is probably priced less sharply than the Premier League. The verdict is still the same, though: a mean closing line value of -5.6% means the prices taken were worse than where the market closed, so the model has no edge. The market strategy's positive closing line value comes from only 23 bets, too few to read anything into.
+Shots help more here than in the Premier League. The main model beats Dixon-Coles on all three scores, by 0.0019 in ranked probability score against 0.0009 in the Premier League, and its forecasts come closer to Bet365's. The Championship market is probably priced less sharply than the Premier League. The verdict is still the same, though: a mean closing line value of -6.0% means the prices taken were worse than where the market closed, so the model has no edge. The market strategy's positive closing line value comes from only 23 bets, too few to read anything into.
 
 ## Limitations
 
@@ -235,7 +265,7 @@ Shots help more here than in the Premier League. The main model beats Dixon-Cole
 
 **When the odds were captured.** The pre-match odds are a single snapshot taken on Friday or Tuesday afternoon, roughly a day before kick-off. They are not the price available at any chosen moment, and the backtest assumes every stake could have been placed at that snapshot.
 
-**Promoted teams.** Newly promoted sides arrive with no recent Premier League results, so their strengths cannot be estimated well. A team with fewer than 10 matches in the training window is flagged and its games are not priced or bet on. For a side with no Premier League matches in the last three years, that means its first 10 games are skipped. The same applies to teams relegated to the Championship, and the season schedule lists their games without a prediction until they have enough matches.
+**Promoted teams.** A newly promoted side is rated from its results in the division below, which says nothing about the players it signs over the summer. In the backtest seasons the model overrated promoted Premier League sides, as described above. A team with fewer than 10 matches across the linked leagues in the training window is still flagged and its games are not priced or bet on, which now only happens to a side coming up from below League One.
 
 **Backtests are not real betting.** Bookmakers limit accounts that win, prices move once money arrives, and the gap between a backtest and real results is almost always unfavourable. Here the backtest already loses, so this mostly matters as a warning against reading anything into the market strategy's seven bets.
 
