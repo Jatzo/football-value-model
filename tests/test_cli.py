@@ -7,6 +7,7 @@ from conftest import FakeSource
 from simulation import simulated_seasons
 
 from valuemodel import cli
+from valuemodel.web import views
 
 
 @pytest.fixture
@@ -255,3 +256,71 @@ def test_backtest_names_the_leagues_it_fitted_on(
 ) -> None:
     assert cli.main(["backtest", "--seasons", "2324", "--no-save", *flags]) == 0
     assert f"Models fitted on results from {leagues}." in capsys.readouterr().out
+
+
+def test_picks_needs_the_fixtures_file(
+    clean_environment: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
+    assert cli.main(["picks"]) == 1
+    assert "Run: valuemodel fixtures" in capsys.readouterr().err
+
+
+def test_picks_lists_value_bets_and_prices_to_beat(
+    clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    day = pd.Timestamp("2026-10-10")
+    pick = {
+        "league": "E0",
+        "date": day,
+        "kickoff": "12:30",
+        "home_team": "Arsenal",
+        "away_team": "Leeds",
+        "market": "1x2",
+        "outcome": "home",
+        "probability": 0.54,
+        "fair_odds": 1 / 0.54,
+        "odds": 2.1,
+        "edge": 0.134,
+        "stake": 20.0,
+    }
+    cell = views.ChanceCell(chance=0.5, fair_odds=2.0, price_to_beat=2.06, likely=True)
+    priced = views.ScheduleRow(
+        day, "15:00", "Matchday 6", "Fulham", "Hull", True, [cell] * 5, 1.5, 0.9
+    )
+    unpriced = views.ScheduleRow(day, "17:30", "Matchday 6", "Leeds", "Newcomers", False, [], 0, 0)
+    clean_environment.setattr(
+        cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok", picks=[pick])
+    )
+    clean_environment.setattr(
+        cli.views,
+        "schedule_view",
+        lambda *_, **__: views.ScheduleView(
+            rounds=1, rows={"E0": [priced, unpriced]}, problems={"E1": "no cached results"}
+        ),
+    )
+    assert cli.run_picks(today=date(2026, 10, 4)) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Paper bets at Bet365 odds, biggest edge first"
+    assert (
+        " ".join(lines[2].split())
+        == "Sat 10 Oct 12:30 Arsenal v Leeds Home win 54.0% 1.85 2.10 +13.4% 20.00"
+    )
+    assert "Stakes are quarter Kelly on a 1000 unit bankroll." in lines
+    assert "Premier League: lowest Bet365 odds that would be a value bet" in lines
+    assert any(line.split()[-5:] == ["2.06"] * 5 for line in lines)
+    assert any(line.rstrip().endswith("Leeds v Newcomers  not priced") for line in lines)
+    assert "Championship: schedule not shown (no cached results)" in lines
+
+
+def test_picks_says_when_nothing_has_value(
+    clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setattr(cli.views, "fixtures_view", lambda _: views.FixturesView(status="ok"))
+    clean_environment.setattr(
+        cli.views, "schedule_view", lambda *_, **__: views.ScheduleView(rounds=1)
+    )
+    assert cli.run_picks(today=date(2026, 10, 4)) == 0
+    out = capsys.readouterr().out
+    assert "No listed game has a value bet at Bet365's current odds." in out
+    assert "No season schedule downloaded yet" in out

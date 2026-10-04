@@ -115,6 +115,13 @@ valuemodel predict --home Arsenal --away Chelsea
 valuemodel predict --home Arsenal --away Chelsea --odds 1.70 3.90 5.25 --totals-odds 1.95 1.95
 ```
 
+List the paper bets on upcoming games. `valuemodel fixtures` fetches the latest fixtures, results and season schedules, and `valuemodel picks` ranks every listed game where Bet365's odds beat the model's fair odds by at least 3%, biggest edge first, with its paper stake. It also prints, for the next round of each league, the lowest Bet365 odds at which each outcome would be a value bet, so games the fixtures file does not list yet can be checked against the bookmaker by hand:
+
+```bash
+valuemodel fixtures
+valuemodel picks
+```
+
 ### Dashboard
 
 ```bash
@@ -122,7 +129,7 @@ valuemodel fixtures
 flask --app valuemodel.web run
 ```
 
-Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. Below that, a season schedule section gives the model's chances, fair odds and expected goals for the next few rounds of the Premier League and Championship, or every remaining round. It has no odds, so it is the model's view of what might happen rather than a list of bets, and games further ahead use today's team ratings. The bets page can also be ordered by the model's chance of each bet winning.
+Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page starts with the same ranked paper bets, each with a box to type a stake and see what it would return. It then prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. A bet calculator takes any upcoming game, outcome, odds and stake, and shows the return, the profit, the edge against the model and whether it counts as value. Below that, a season schedule section gives the model's chances, fair odds, prices to beat and expected goals for the next few rounds of the Premier League and Championship, or every remaining round. It has no odds, so it is the model's view of what might happen rather than a list of bets, and games further ahead use today's team ratings. The bets page can also be ordered by the model's chance of each bet winning.
 
 The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
 
@@ -141,7 +148,7 @@ GitHub Actions runs the same checks on every push and pull request. The code is 
 | `cli.py`, `config.py` | The `valuemodel` command, settings, leagues and seasons |
 | `data.py`, `teams.py`, `fixtures.py`, `schedule.py` | Downloading, caching, cleaning and standardising results, odds, upcoming fixtures and season schedules |
 | `models/`, `expected_goals.py` | Poisson, Dixon-Coles and shots-adjusted models with time decay, and shot-based expected goals |
-| `markets.py`, `odds.py`, `staking.py` | Market probabilities, margin removal, value detection and stakes |
+| `markets.py`, `odds.py`, `staking.py`, `picks.py` | Market probabilities, margin removal, value detection, stakes, upcoming paper bets and prices to beat |
 | `walkforward.py`, `tuning.py`, `backtest.py` | Walk-forward forecasting, choosing settings, and the backtest metrics |
 | `store.py`, `report.py`, `labels.py`, `web/` | SQLite storage, the text report, shared display formats and the dashboard |
 

@@ -9,16 +9,19 @@ from collections.abc import Callable, Sequence
 from datetime import date
 from difflib import get_close_matches
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 from valuemodel.backtest import MAIN_MODEL, MODELS, run_backtest
 from valuemodel.config import (
     BACKTEST_SEASONS,
+    BOOKMAKERS,
     DEFAULT_LEAGUES,
     DEFAULT_SEASONS,
     FIXTURE_LEAGUES,
     HISTORY_SEASONS,
+    LEAGUES,
     MIN_TEAM_MATCHES,
     MODEL_XI,
     TUNING_SEASONS,
@@ -45,12 +48,13 @@ from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, STRATEGY_LABELS, la
 from valuemodel.markets import predict
 from valuemodel.models.common import UnknownTeamError
 from valuemodel.odds import MARKETS, check_quotes
-from valuemodel.report import format_report, staking_description
+from valuemodel.report import format_report, staking_description, table
 from valuemodel.schedule import SCHEDULE_FILES, download_schedule, load_schedule, upcoming_games
 from valuemodel.staking import stake
 from valuemodel.store import connect, database_path, save_run
 from valuemodel.teams import normalise_team
 from valuemodel.tuning import SHOT_WEIGHT_GRID, XI_GRID, evaluate_shot_weights, evaluate_xi
+from valuemodel.web import views
 
 
 def _argument[T](check: Callable[[str], T]) -> Callable[[str], T]:
@@ -153,6 +157,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="download upcoming fixtures and refresh this season's results for the dashboard",
     )
     _add_leagues(fixtures, "leagues whose current season results to refresh", FIXTURE_LEAGUES)
+
+    commands.add_parser(
+        "picks",
+        help="list value bets on listed fixtures and the odds the next round's games need",
+    )
 
     shots = commands.add_parser(
         "tune-shots",
@@ -382,6 +391,71 @@ def _schedule_line(league: str, path: Path | None, today: date) -> str:
     return f"{league} schedule: {len(games)} games to play, next on {games['date'].min().date()}"
 
 
+PICK_HEADERS = ["Match", "Bet", "Chance", "Fair odds", "Odds", "Edge", "Stake"]
+SCHEDULE_HEADERS = ["Match", "Home", "Draw", "Away", "Over 2.5", "Under 2.5"]
+
+
+def run_picks(today: date | None = None) -> int:
+    settings = load_settings()
+    today = today or date.today()
+    bookmaker = BOOKMAKERS[settings.bookmaker]
+    fixtures = views.fixtures_view(settings)
+    if fixtures.status == "missing":
+        raise FileNotFoundError("No fixtures downloaded yet. Run: valuemodel fixtures")
+
+    print(f"Paper bets at {bookmaker} odds, biggest edge first")
+    if fixtures.picks:
+        print(table(PICK_HEADERS, [_pick_row(pick) for pick in fixtures.picks]))
+        print(
+            f"Stakes are {staking_description(settings)} on a "
+            f"{settings.starting_bankroll:g} unit bankroll."
+        )
+    else:
+        print(f"No listed game has a value bet at {bookmaker}'s current odds.")
+
+    schedule = views.schedule_view(settings, rounds=1, today=today)
+    if schedule.missing:
+        print("\nNo season schedule downloaded yet. Run: valuemodel fixtures")
+    for league, games in schedule.rows.items():
+        print(f"\n{LEAGUES[league]}: lowest {bookmaker} odds that would be a value bet")
+        if not games:
+            print("No games left to play.")
+            continue
+        print(table(SCHEDULE_HEADERS, [_price_to_beat_row(game) for game in games]))
+    for league, reason in schedule.problems.items():
+        print(f"\n{LEAGUES[league]}: schedule not shown ({reason})")
+    print(
+        f"\nValue means an edge of at least {share(settings.edge_threshold)}. In the backtests, "
+        "bets chosen this way\nlost money, so treat these as a test of the model, not as tips."
+    )
+    return 0
+
+
+def _match(day: pd.Timestamp, time_of_day: object, home: str, away: str) -> str:
+    kickoff = f"{day:%a %d %b} {time_of_day or ''}".strip()
+    return f"{kickoff}  {home} v {away}"
+
+
+def _pick_row(pick: dict[str, Any]) -> list[str]:
+    return [
+        _match(pick["date"], pick["kickoff"], pick["home_team"], pick["away_team"]),
+        OUTCOME_LABELS[pick["outcome"]],
+        f"{pick['probability']:.1%}",
+        f"{pick['fair_odds']:.2f}",
+        f"{pick['odds']:.2f}",
+        f"{pick['edge']:+.1%}",
+        f"{pick['stake']:.2f}",
+    ]
+
+
+def _price_to_beat_row(game: views.ScheduleRow) -> list[str]:
+    prices = [f"{cell.price_to_beat:.2f}" for cell in game.cells]
+    return [
+        _match(game.date, game.kickoff, game.home_team, game.away_team),
+        *(prices or ["not priced", "", "", "", ""]),
+    ]
+
+
 def run_tune_shots(league: str, weights: Sequence[float], linked: bool) -> int:
     leagues = linked_leagues(league, linked)
     matches = load_matches(leagues, HISTORY_SEASONS + TUNING_SEASONS, load_settings())
@@ -434,6 +508,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "download": lambda: run_download(args.leagues, args.seasons, args.refresh),
         "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi, not args.single_league),
         "fixtures": lambda: run_fixtures(args.leagues),
+        "picks": lambda: run_picks(),
         "tune-shots": lambda: run_tune_shots(args.league, args.weights, not args.single_league),
         "backtest": lambda: run_backtest_command(
             args.league, args.seasons, not args.no_save, not args.single_league
