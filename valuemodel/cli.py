@@ -1,4 +1,4 @@
-"""Command line entry point."""
+"""Price football matches, look for value against bookmaker odds and backtest the results."""
 
 import argparse
 import logging
@@ -352,30 +352,17 @@ def _quoted_odds(args: argparse.Namespace) -> dict[str, float]:
 def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     args = build_parser().parse_args(argv)
+    commands: dict[str, Callable[[], int]] = {
+        "download": lambda: run_download(args.leagues, args.seasons, args.refresh),
+        "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi),
+        "fixtures": lambda: run_fixtures(args.leagues),
+        "backtest": lambda: run_backtest_command(args.league, args.seasons, not args.no_save),
+        "predict": lambda: run_predict(
+            args.league, args.model, args.home, args.away, args.as_of, args.xi, _quoted_odds(args)
+        ),
+    }
     try:
-        if args.command == "download":
-            return run_download(args.leagues, args.seasons, args.refresh)
-        if args.command == "tune-xi":
-            return run_tune_xi(args.league, args.model, args.xi)
-        if args.command == "fixtures":
-            return run_fixtures(args.leagues)
-        if args.command == "backtest":
-            return run_backtest_command(args.league, args.seasons, not args.no_save)
-        if args.command == "predict":
-            return run_predict(
-                args.league,
-                args.model,
-                args.home,
-                args.away,
-                args.as_of,
-                args.xi,
-                _quoted_odds(args),
-            )
-    except (FileNotFoundError, ValueError) as error:
+        return commands[args.command]()
+    except (FileNotFoundError, ValueError, RuntimeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    return 2
-
-
-if __name__ == "__main__":
-    sys.exit(main())
