@@ -5,7 +5,7 @@ from simulation import add_odds, simulate_league, true_model
 
 from valuemodel.config import Settings
 from valuemodel.fixtures import price_fixtures
-from valuemodel.picks import PICK_COLUMNS, price_to_beat, value_bets
+from valuemodel.picks import PICK_COLUMNS, Leg, accumulator, price_to_beat, value_bets
 
 
 @pytest.fixture(scope="module")
@@ -70,3 +70,43 @@ def test_price_to_beat_gives_exactly_the_threshold_edge(probability: float) -> N
 def test_price_to_beat_rejects_impossible_chances() -> None:
     with pytest.raises(ValueError, match="probability"):
         price_to_beat(0.0, 0.03)
+
+
+ARSENAL = Leg("2026-10-10 Arsenal v Leeds", "home", 1.9, 0.582)
+UNITED = Leg("2026-10-10 Man United v Tottenham", "home", 2.0, 0.6)
+LIVERPOOL = Leg("2026-10-11 Liverpool v Man City", "away", 2.6, 0.43)
+
+
+def test_accumulator_multiplies_odds_and_chances() -> None:
+    acca = accumulator([ARSENAL, UNITED, LIVERPOOL])
+    assert acca.odds == pytest.approx(1.9 * 2.0 * 2.6)
+    assert acca.odds == pytest.approx(9.88)
+    assert acca.probability == pytest.approx(0.582 * 0.6 * 0.43)
+    assert acca.fair_odds == pytest.approx(1 / (0.582 * 0.6 * 0.43))
+    assert acca.edge == pytest.approx(0.582 * 0.6 * 0.43 * 9.88 - 1)
+    assert acca.returns(10) == pytest.approx(98.8)
+
+
+def test_a_single_leg_is_a_single_bet() -> None:
+    single = accumulator([ARSENAL])
+    assert (single.odds, single.probability) == (1.9, 0.582)
+    assert single.edge == pytest.approx(0.582 * 1.9 - 1)
+
+
+def test_two_legs_from_the_same_match_are_refused() -> None:
+    over = Leg(ARSENAL.match, "over25", 2.0, 0.376)
+    with pytest.raises(ValueError, match="Arsenal v Leeds is already in the accumulator"):
+        accumulator([ARSENAL, over])
+
+
+@pytest.mark.parametrize(
+    ("legs", "message"),
+    [
+        ([], "at least one leg"),
+        ([Leg("a", "home", 1.0, 0.5)], "greater than 1"),
+        ([Leg("a", "home", 2.0, 0.0)], "probability"),
+    ],
+)
+def test_invalid_accumulators_are_refused(legs: list[Leg], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        accumulator(legs)
