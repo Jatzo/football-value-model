@@ -34,18 +34,27 @@ def overround(odds: np.ndarray) -> np.ndarray:
     return implied_probabilities(odds).sum(axis=-1) - 1.0
 
 
+def _power_sums(implied: np.ndarray, k: np.ndarray) -> np.ndarray:
+    return (implied ** k[:, None]).sum(axis=1)
+
+
 def _power_exponent(implied: np.ndarray) -> np.ndarray:
     """Find k for each row so that the implied probabilities raised to k sum to 1.
 
-    The sum falls steadily as k rises, so bisection always finds the answer.
-    Starting from [0, 100] covers any market with a margin below several
-    hundred percent, far beyond anything a bookmaker offers.
+    The sum falls steadily as k rises, so once an upper bound is found where the
+    sum is below 1, bisection always finds the answer. The bound starts at 1,
+    which is enough for any market with a margin, and doubles for rows that need
+    more. A market whose favourite is priced very close to 1.0 can need a large
+    k, which is why the bound is not fixed.
     """
+    complete = ~np.isnan(implied).any(axis=1)
     low = np.zeros(implied.shape[0])
-    high = np.full(implied.shape[0], 100.0)
+    high = np.ones(implied.shape[0])
+    while np.any(complete & (_power_sums(implied, high) > 1.0)):
+        high = np.where(_power_sums(implied, high) > 1.0, high * 2, high)
     for _ in range(_POWER_ITERATIONS):
         middle = (low + high) / 2
-        too_big = (implied ** middle[:, None]).sum(axis=1) > 1.0
+        too_big = _power_sums(implied, middle) > 1.0
         low = np.where(too_big, middle, low)
         high = np.where(too_big, high, middle)
     return (low + high) / 2

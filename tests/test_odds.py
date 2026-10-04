@@ -69,6 +69,12 @@ def test_power_takes_more_off_the_longshot() -> None:
     assert power[0] > proportional[0]
 
 
+@pytest.mark.parametrize("odds", [[1.004, 1.004], [1.01, 1.01, 1.01], [1.001, 30.0, 60.0]])
+def test_power_method_handles_extreme_prices(odds: list[float]) -> None:
+    fair = remove_margin(np.array(odds), "power")
+    assert fair.sum() == pytest.approx(1.0, abs=1e-12)
+
+
 def test_negative_margin_is_handled() -> None:
     fair = remove_margin(np.array([2.2, 3.8, 4.4]), "power")
     assert fair.sum() == pytest.approx(1.0, abs=1e-12)
