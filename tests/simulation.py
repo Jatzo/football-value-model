@@ -28,6 +28,7 @@ def simulate_league(
     rng: np.random.Generator,
     start: str = "2020-08-01",
     league: str = "E0",
+    season: str = "2021",
 ) -> pd.DataFrame:
     """Play every pairing home and away `rounds` times, sampling each score from the model."""
     rows = []
@@ -46,6 +47,7 @@ def simulate_league(
         rows, columns=["date", "home_team", "away_team", "home_goals", "away_goals"]
     )
     frame["league"] = league
+    frame["season"] = season
     frame["home_goals"] = frame["home_goals"].astype("Int64")
     frame["away_goals"] = frame["away_goals"].astype("Int64")
     difference = frame["home_goals"] - frame["away_goals"]
