@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from conftest import FakeSource
-from simulation import simulate_league, true_model
+from simulation import add_odds, simulate_league, true_model
 
 from valuemodel import cli
 
@@ -149,7 +149,10 @@ def test_flat_staking_is_described(
     clean_environment.setenv("VALUEMODEL_STAKING", "flat")
     args = ["predict", "--home", "Team 00", "--away", "Team 01", "--odds", "50", "50", "50"]
     assert cli.main(args) == 0
-    assert "stake 10.00 of a 1000 unit bankroll (flat stakes)" in capsys.readouterr().out
+    assert (
+        "stake 10.00 of a 1000 unit bankroll (flat stakes of 1% of the starting bankroll)"
+        in capsys.readouterr().out
+    )
 
 
 def test_odds_must_be_above_one(capsys: pytest.CaptureFixture[str]) -> None:
@@ -166,3 +169,37 @@ def test_bad_setting_is_reported(
     clean_environment.setenv("VALUEMODEL_MARGIN_METHOD", "shin")
     assert cli.main(["predict", "--home", "Team 00", "--away", "Team 01"]) == 1
     assert "VALUEMODEL_MARGIN_METHOD must be one of" in capsys.readouterr().err
+
+
+@pytest.fixture
+def simulated_cache_with_odds(clean_environment: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    rng = np.random.default_rng(6)
+    model = true_model(8, -0.1, rng)
+    seasons = [("2223", "2022-08-01"), ("2324", "2023-08-01")]
+    league = pd.concat(
+        [simulate_league(model, 2, rng, start=start, season=code) for code, start in seasons],
+        ignore_index=True,
+    )
+    league = add_odds(league, model, rng)
+    clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
+    clean_environment.setattr(cli, "load_matches", lambda *_: league)
+    return tmp_path
+
+
+def test_backtest_prints_the_report_and_saves_the_run(
+    simulated_cache_with_odds: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["backtest", "--seasons", "2324"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Backtest of E0, seasons 2023/24")
+    assert "Closing line value" in out
+    assert "Saved as run 1 in" in out
+    assert (simulated_cache_with_odds / "valuemodel.sqlite").exists()
+
+
+def test_backtest_without_saving(
+    simulated_cache_with_odds: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["backtest", "--seasons", "2324", "--no-save"]) == 0
+    assert "Saved as run" not in capsys.readouterr().out
+    assert not (simulated_cache_with_odds / "valuemodel.sqlite").exists()

@@ -8,7 +8,9 @@ from collections.abc import Callable, Sequence
 import numpy as np
 import pandas as pd
 
+from valuemodel.backtest import run_backtest
 from valuemodel.config import (
+    BACKTEST_SEASONS,
     DEFAULT_LEAGUES,
     DEFAULT_SEASONS,
     DEFAULT_XI,
@@ -33,7 +35,9 @@ from valuemodel.models.common import FittedModel, UnknownTeamError
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
 from valuemodel.odds import MARKETS, edge, find_value, overround, remove_margin
+from valuemodel.report import format_report, staking_description
 from valuemodel.staking import stake
+from valuemodel.store import connect, database_path, save_run
 from valuemodel.teams import normalise_team
 from valuemodel.tuning import XI_GRID, evaluate_xi
 
@@ -129,6 +133,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="decay rates per day to try (default: %(default)s)",
     )
 
+    backtest = commands.add_parser(
+        "backtest", help="walk forward through past seasons with paper bets and print a report"
+    )
+    backtest.add_argument(
+        "--league",
+        default=DEFAULT_LEAGUES[0],
+        type=_argument(validate_league),
+        metavar="CODE",
+        help="league code (default: %(default)s)",
+    )
+    backtest.add_argument(
+        "--seasons",
+        nargs="+",
+        default=list(BACKTEST_SEASONS),
+        type=_argument(validate_season),
+        metavar="CODE",
+        help="seasons to bet on (default: %(default)s)",
+    )
+    backtest.add_argument(
+        "--no-save", action="store_true", help="print the report without saving the run"
+    )
+
     forecast = commands.add_parser("predict", help="price one match with the fitted model")
     _add_model_arguments(forecast)
     forecast.add_argument("--home", required=True, help="home team, as spelt in the data")
@@ -193,14 +219,6 @@ def run_tune_xi(league: str, model: str, xi_values: Sequence[float]) -> int:
     return 0
 
 
-def _staking_description(settings: Settings) -> str:
-    if settings.staking == "flat":
-        return "flat stakes"
-    if settings.kelly_fraction == 0.25:
-        return "quarter Kelly"
-    return f"{settings.kelly_fraction:g} Kelly"
-
-
 def _print_prices(
     probabilities: MarketProbabilities, quoted: dict[str, float], settings: Settings
 ) -> None:
@@ -243,7 +261,7 @@ def _print_prices(
         amount = stake(bet.probability, bet.odds, settings.starting_bankroll, settings)
         print(
             f"Paper bet: {MARKET_LABELS[bet.outcome]} at {bet.odds:.2f}, stake {amount:.2f} "
-            f"of a {settings.starting_bankroll:g} unit bankroll ({_staking_description(settings)})"
+            f"of a {settings.starting_bankroll:g} unit bankroll ({staking_description(settings)})"
         )
 
 
@@ -288,6 +306,24 @@ def run_predict(
     return 0
 
 
+def run_backtest_command(league: str, seasons: Sequence[str], save: bool) -> int:
+    settings = load_settings()
+    needed = list(dict.fromkeys([*DEFAULT_SEASONS, *seasons]))
+    matches = load_matches([league], needed, settings)
+    result = run_backtest(matches, league, seasons, settings)
+    print(format_report(result))
+    if save:
+        path = database_path(settings)
+        connection = connect(path)
+        try:
+            run_id = save_run(connection, result)
+        finally:
+            connection.close()
+        print()
+        print(f"Saved as run {run_id} in {path}")
+    return 0
+
+
 def _quoted_odds(args: argparse.Namespace) -> dict[str, float]:
     quoted: dict[str, float] = {}
     if args.odds:
@@ -305,6 +341,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_download(args.leagues, args.seasons, args.refresh)
         if args.command == "tune-xi":
             return run_tune_xi(args.league, args.model, args.xi)
+        if args.command == "backtest":
+            return run_backtest_command(args.league, args.seasons, not args.no_save)
         if args.command == "predict":
             return run_predict(
                 args.league,
