@@ -248,14 +248,20 @@ def simulated_league() -> pd.DataFrame:
 
 def test_run_backtest_end_to_end(simulated_league: pd.DataFrame) -> None:
     result = run_backtest(simulated_league, "E0", ["2324"], Settings(), min_matches=0)
-    assert list(result.summary["strategy"]) == ["dixon-coles", "poisson", "market"]
+    assert list(result.summary["strategy"]) == [
+        "dixon-coles",
+        "poisson",
+        "shots-adjusted",
+        "market",
+    ]
     assert list(result.scores["forecaster"]) == [
         "dixon-coles",
         "poisson",
+        "shots-adjusted",
         "bet365 pre-match",
         "pinnacle closing",
     ]
-    assert set(result.calibration) == {"dixon-coles", "poisson"}
+    assert set(result.calibration) == {"dixon-coles", "poisson", "shots-adjusted"}
     for name, bets in result.bets.items():
         if len(bets):
             row = result.summary.set_index("strategy").loc[name]
@@ -284,7 +290,7 @@ def test_pinnacle_as_bookmaker_is_scored_and_skips_the_market_strategy(
 ) -> None:
     settings = Settings(bookmaker="pinnacle")
     result = run_backtest(simulated_league, "E0", ["2324"], settings, min_matches=0)
-    assert list(result.summary["strategy"]) == ["dixon-coles", "poisson"]
+    assert list(result.summary["strategy"]) == ["dixon-coles", "poisson", "shots-adjusted"]
     assert "pinnacle pre-match" in list(result.scores["forecaster"])
 
 

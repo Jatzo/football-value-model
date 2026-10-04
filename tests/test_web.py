@@ -70,10 +70,10 @@ def test_models_page(client: FlaskClient) -> None:
     response = client.get("/models")
     html = response.get_data(as_text=True)
     assert response.status_code == 200
-    for name in ("Dixon-Coles", "Poisson", "Bet365 pre-match, margin removed"):
+    for name in ("Dixon-Coles", "Poisson", "Shots-adjusted", "Bet365 pre-match, margin removed"):
         assert name in html
     calibration = embedded_json(html, "calibration-data")
-    assert [line["name"] for line in calibration] == ["Dixon-Coles", "Poisson"]
+    assert [line["name"] for line in calibration] == ["Dixon-Coles", "Poisson", "Shots-adjusted"]
     assert all("count" in point for point in calibration[0]["points"])
 
 

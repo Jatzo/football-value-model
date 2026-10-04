@@ -22,6 +22,7 @@ from valuemodel.data import odds_columns
 from valuemodel.markets import OUTCOMES
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
+from valuemodel.models.shots_adjusted import fit_shots_adjusted
 from valuemodel.odds import MARKETS, find_value, remove_margin
 from valuemodel.scoring import brier_score, log_loss, outcome_indices, ranked_probability_score
 from valuemodel.staking import stake
@@ -30,7 +31,11 @@ from valuemodel.walkforward import (
     walk_forward_forecasts,
 )
 
-MODELS: dict[str, FitFunction] = {"dixon-coles": fit_dixon_coles, "poisson": fit_poisson}
+MODELS: dict[str, FitFunction] = {
+    "dixon-coles": fit_dixon_coles,
+    "poisson": fit_poisson,
+    "shots-adjusted": fit_shots_adjusted,
+}
 
 # Treating Pinnacle's margin-free pre-match prices as the forecast gives the
 # "simply follow the market" strategy: bet wherever the bookmaker is more
@@ -352,8 +357,7 @@ def run_backtest(
 
     pre_match = f"{BOOKMAKERS[settings.bookmaker].lower()} pre-match"
     scored = {
-        "dixon-coles": forecasts["dixon-coles"],
-        "poisson": forecasts["poisson"],
+        **{name: forecasts[name] for name in MODELS},
         pre_match: market_forecasts(targets, settings.bookmaker, settings.margin_method),
         "pinnacle closing": market_forecasts(targets, CLOSING_SOURCE, settings.margin_method),
     }

@@ -45,7 +45,7 @@ from valuemodel.report import format_report, staking_description
 from valuemodel.staking import stake
 from valuemodel.store import connect, database_path, save_run
 from valuemodel.teams import normalise_team
-from valuemodel.tuning import XI_GRID, evaluate_xi
+from valuemodel.tuning import SHOT_WEIGHT_GRID, XI_GRID, evaluate_shot_weights, evaluate_xi
 
 
 def _argument[T](check: Callable[[str], T]) -> Callable[[str], T]:
@@ -137,6 +137,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="download upcoming fixtures and refresh this season's results for the dashboard",
     )
     _add_leagues(fixtures, "leagues whose current season results to refresh")
+
+    shots = commands.add_parser(
+        "tune-shots",
+        help="score the shots-adjusted model for a range of expected goals weights",
+    )
+    _add_league(shots)
+    shots.add_argument(
+        "--weights",
+        nargs="+",
+        type=float,
+        default=list(SHOT_WEIGHT_GRID),
+        help="shares of expected goals in the blend to try (default: %(default)s)",
+    )
 
     backtest = commands.add_parser(
         "backtest", help="walk forward through past seasons with paper bets and print a report"
@@ -326,6 +339,21 @@ def run_fixtures(leagues: Sequence[str]) -> int:
     return 0
 
 
+def run_tune_shots(league: str, weights: Sequence[float]) -> int:
+    matches = load_matches([league], HISTORY_SEASONS + TUNING_SEASONS, load_settings())
+    results = evaluate_shot_weights(matches, TUNING_SEASONS, weights)
+    print(f"Shots-adjusted on {league}, forecasting seasons {', '.join(TUNING_SEASONS)}")
+    print(f"{'weight':>8}  {'matches':>7}  {'log loss':>8}  {'RPS':>7}  {'Brier':>7}")
+    for row in results.itertuples():
+        print(
+            f"{row.weight:>8.2f}  {row.matches:>7}  {row.log_loss:>8.5f}  "
+            f"{row.rps:>7.5f}  {row.brier:>7.5f}"
+        )
+    best = results.loc[results["rps"].idxmin(), "weight"]
+    print(f"Lowest ranked probability score at weight = {best}")
+    return 0
+
+
 def run_backtest_command(league: str, seasons: Sequence[str], save: bool) -> int:
     settings = load_settings()
     matches = load_matches([league], history_seasons(seasons), settings)
@@ -359,6 +387,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "download": lambda: run_download(args.leagues, args.seasons, args.refresh),
         "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi),
         "fixtures": lambda: run_fixtures(args.leagues),
+        "tune-shots": lambda: run_tune_shots(args.league, args.weights),
         "backtest": lambda: run_backtest_command(args.league, args.seasons, not args.no_save),
         "predict": lambda: run_predict(
             args.league, args.model, args.home, args.away, args.as_of, args.xi, _quoted_odds(args)

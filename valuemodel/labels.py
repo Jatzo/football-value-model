@@ -15,12 +15,14 @@ MARKET_LABELS: dict[str, str] = {"1x2": "Match result", "totals": "Over/under 2.
 STRATEGY_LABELS: dict[str, str] = {
     "dixon-coles": "Dixon-Coles",
     "poisson": "Poisson",
+    "shots-adjusted": "Shots-adjusted",
     "market": "Follow the market",
 }
 
 FORECASTER_LABELS: dict[str, str] = {
     "dixon-coles": "Dixon-Coles",
     "poisson": "Poisson",
+    "shots-adjusted": "Shots-adjusted",
     "bet365 pre-match": "Bet365 pre-match, margin removed",
     "pinnacle pre-match": "Pinnacle pre-match, margin removed",
     "pinnacle closing": "Pinnacle closing, margin removed",
