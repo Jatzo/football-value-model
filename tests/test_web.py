@@ -159,7 +159,7 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
         "Div,Date,Time,HomeTeam,AwayTeam,B365H,B365D,B365A,B365>2.5,B365<2.5\n"
         "E0,10/10/2026,15:00,Team 00,Team 01,40.0,3.5,1.9,1.9,1.9\n"
         "E0,10/10/2026,17:30,Newcomers,Team 02,2.0,3.5,3.5,1.9,1.9\n"
-        "E2,10/10/2026,15:00,Burton,Reading,2.0,3.4,3.6,1.9,1.9\n"
+        "E3,10/10/2026,15:00,Barnet,Gillingham,2.0,3.4,3.6,1.9,1.9\n"
     )
     (settings.raw_dir / "fixtures.csv").write_text(fixtures, encoding="utf-8")
 
@@ -168,7 +168,7 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
     assert "Team 00 v Team 01" in html
     assert html.count('class="num price value"') >= 1
     assert "Not priced: a team has fewer than 10 matches" in html
-    assert "E2 (no cached results)" in html
+    assert "E3 (no cached results)" in html
 
 
 SCHEDULE_TEAMS = ["Arsenal", "Leeds", "Chelsea", "Fulham", "Everton", "Brentford", "Hull", "Wolves"]

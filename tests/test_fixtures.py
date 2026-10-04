@@ -72,7 +72,7 @@ def history_and_fixtures() -> tuple[pd.DataFrame, pd.DataFrame]:
     upcoming = upcoming.iloc[:6].copy()
     upcoming.loc[upcoming.index[0], "b365_home"] = 50.0
     newcomer = upcoming.iloc[[1]].assign(home_team="Newcomers")
-    other_league = upcoming.iloc[[2]].assign(league="E2")
+    other_league = upcoming.iloc[[2]].assign(league="E3")
     fixtures = pd.concat([upcoming, newcomer, other_league], ignore_index=True)
     return history, fixtures
 
@@ -82,7 +82,7 @@ def test_price_fixtures(history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame])
     result = price_fixtures(history, fixtures, Settings(), xi=0.003)
 
     assert result.priced_leagues == ["E0"]
-    assert result.unpriced_leagues == {"E2": "no cached results"}
+    assert result.unpriced_leagues == {"E3": "no cached results"}
     priced = result.fixtures
     assert len(priced) == 7
     reliable = priced[priced["reliable"]]
@@ -100,6 +100,27 @@ def test_unreliable_fixtures_are_not_priced(
     assert not newcomer["reliable"]
     assert np.isnan(newcomer["home"])
     assert pd.isna(newcomer["value_1x2"])
+
+
+def test_fixtures_use_linked_leagues_but_not_history_only_ones(
+    history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame],
+) -> None:
+    """Championship games are priced from Premier League results too, League One's never."""
+    history, fixtures = history_and_fixtures
+    upcoming = fixtures[fixtures["league"] == "E0"].iloc[:2]
+    championship = upcoming.iloc[[0]].assign(league="E1")
+    league_one = upcoming.iloc[[1]].assign(league="E2")
+    # Too few Championship results to rate anyone without the Premier League's.
+    linked = [history, history.iloc[:3].assign(league="E1"), history.iloc[:20].assign(league="E2")]
+    result = price_fixtures(
+        pd.concat(linked),
+        pd.concat([championship, league_one], ignore_index=True),
+        Settings(),
+        xi=0.003,
+    )
+    assert result.priced_leagues == ["E1"]
+    assert result.fixtures.iloc[0]["reliable"]
+    assert result.unpriced_leagues == {"E2": "used only to rate teams moving division"}
 
 
 def test_no_known_leagues(history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame]) -> None:

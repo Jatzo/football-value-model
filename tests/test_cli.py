@@ -243,3 +243,14 @@ def test_backtest_names_the_seasons_it_needs(
     clean_environment.setenv("VALUEMODEL_DATA_DIR", str(tmp_path))
     assert cli.main(["backtest", "--seasons", "1819"]) == 1
     assert "--seasons 1516 1617 1718 1819" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("flags", "leagues"), [([], "E0, E1"), (["--single-league"], "E0")])
+def test_backtest_names_the_leagues_it_fitted_on(
+    simulated_cache_with_odds: Path,
+    capsys: pytest.CaptureFixture[str],
+    flags: list[str],
+    leagues: str,
+) -> None:
+    assert cli.main(["backtest", "--seasons", "2324", "--no-save", *flags]) == 0
+    assert f"Models fitted on results from {leagues}." in capsys.readouterr().out

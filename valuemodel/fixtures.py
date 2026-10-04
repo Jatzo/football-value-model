@@ -13,7 +13,13 @@ import httpx
 import pandas as pd
 
 from valuemodel.backtest import MAIN_MODEL, MODELS
-from valuemodel.config import MIN_TEAM_MATCHES, Settings, current_season
+from valuemodel.config import (
+    HISTORY_ONLY_LEAGUES,
+    MIN_TEAM_MATCHES,
+    Settings,
+    current_season,
+    linked_leagues,
+)
 from valuemodel.data import (
     MATCH_COLUMNS,
     ODDS_COLUMNS,
@@ -77,11 +83,14 @@ def price_fixtures(
     known = set(matches["league"])
     frames, priced, unpriced = [], [], {}
     for league in dict.fromkeys(fixtures["league"]):
+        if league in HISTORY_ONLY_LEAGUES:
+            unpriced[league] = "used only to rate teams moving division"
+            continue
         if league not in known:
             unpriced[league] = "no cached results"
             continue
         upcoming = fixtures[fixtures["league"] == league]
-        history = matches[matches["league"] == league]
+        history = matches[matches["league"].isin(linked_leagues(league))]
         try:
             model = MODELS[MAIN_MODEL](history, upcoming["date"].min(), xi)
         except (ValueError, RuntimeError) as error:

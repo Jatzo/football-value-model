@@ -4,7 +4,7 @@ Forecasts are refitted on the same schedule as the backtest, at each odds
 capture date, so each setting is chosen under the conditions it is later judged by.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from functools import partial
 
 import pandas as pd
@@ -52,12 +52,13 @@ def evaluate_xi(
     xi_values: Iterable[float] = XI_GRID,
     fit: FitFunction = fit_shots_adjusted,
     min_matches: int = MIN_TEAM_MATCHES,
+    history_leagues: Mapping[str, Sequence[str]] | None = None,
 ) -> pd.DataFrame:
     """Score walk-forward forecasts for each candidate xi."""
     seasons = list(seasons)
     rows = []
     for xi in xi_values:
-        forecasts = walk_forward_forecasts(matches, seasons, fit, xi, min_matches)
+        forecasts = walk_forward_forecasts(matches, seasons, fit, xi, min_matches, history_leagues)
         rows.append({"xi": xi, **score_forecasts(forecasts)})
     return pd.DataFrame(rows)
 
@@ -68,6 +69,7 @@ def evaluate_shot_weights(
     weights: Iterable[float] = SHOT_WEIGHT_GRID,
     xi: float = SHOTS_XI,
     min_matches: int = MIN_TEAM_MATCHES,
+    history_leagues: Mapping[str, Sequence[str]] | None = None,
 ) -> pd.DataFrame:
     """Score the shots-adjusted model for each share of expected goals in the blend.
 
@@ -77,6 +79,6 @@ def evaluate_shot_weights(
     rows = []
     for weight in weights:
         fit = partial(fit_shots_adjusted, weight=weight)
-        forecasts = walk_forward_forecasts(matches, seasons, fit, xi, min_matches)
+        forecasts = walk_forward_forecasts(matches, seasons, fit, xi, min_matches, history_leagues)
         rows.append({"weight": weight, **score_forecasts(forecasts)})
     return pd.DataFrame(rows)

@@ -18,6 +18,7 @@ from valuemodel.config import (
     MIN_TEAM_MATCHES,
     MODEL_XI,
     Settings,
+    linked_leagues,
 )
 from valuemodel.data import odds_columns
 from valuemodel.markets import OUTCOMES
@@ -323,6 +324,8 @@ class BacktestResult:
     season_summary: pd.DataFrame = field(default_factory=pd.DataFrame)
     scores: pd.DataFrame = field(default_factory=pd.DataFrame)
     calibration: dict[str, pd.DataFrame] = field(default_factory=dict)
+    # Not stored with saved runs, so empty for any run loaded from the database.
+    history_leagues: tuple[str, ...] = ()
 
 
 def _summarise(bets: pd.DataFrame, starting_bankroll: float) -> dict[str, float]:
@@ -365,21 +368,30 @@ def run_backtest(
     settings: Settings,
     xi: float | None = None,
     min_matches: int = MIN_TEAM_MATCHES,
+    linked: bool = True,
 ) -> BacktestResult:
     """Forecast, bet and score every match of the given seasons in one league.
 
     Each model uses its own tuned time decay unless xi is given for all of them.
+    Models are fitted on the league's linked divisions too, unless linked is False.
     """
     seasons = tuple(seasons)
-    history = matches[matches["league"] == league]
-    targets = history[history["season"].isin(seasons)]
+    sources = linked_leagues(league, linked)
+    in_league = matches["league"] == league
+    targets = matches[in_league & matches["season"].isin(seasons)]
     model_xi = {name: MODEL_XI[name] if xi is None else xi for name in MODELS}
     result = BacktestResult(
-        league=league, seasons=seasons, xi=model_xi[MAIN_MODEL], settings=settings
+        league=league,
+        seasons=seasons,
+        xi=model_xi[MAIN_MODEL],
+        settings=settings,
+        history_leagues=sources,
     )
 
     forecasts = {
-        name: walk_forward_forecasts(history, seasons, fit, model_xi[name], min_matches)
+        name: walk_forward_forecasts(
+            matches, seasons, fit, model_xi[name], min_matches, history_leagues={league: sources}
+        )
         for name, fit in MODELS.items()
     }
     # Following the market means betting where the bookmaker beats Pinnacle, which

@@ -43,13 +43,16 @@ def _header(result: BacktestResult) -> str:
     settings = result.settings
     seasons = ", ".join(season_label(season) for season in result.seasons)
     cap, threshold = share(settings.max_stake), share(settings.edge_threshold)
-    return (
+    header = (
         f"Backtest of {result.league}, seasons {seasons}\n"
         f"Bets taken at {BOOKMAKERS[settings.bookmaker]} pre-match odds with "
         f"{staking_description(settings)}, capped at {cap} of the bankroll.\n"
         f"Edge threshold {threshold}, {settings.margin_method} margin removal, "
         f"main model xi {result.xi}, starting bankroll {settings.starting_bankroll:g} units."
     )
+    if result.history_leagues:
+        header += f"\nModels fitted on results from {', '.join(result.history_leagues)}."
+    return header
 
 
 def _clv_section(summary: pd.DataFrame) -> str:

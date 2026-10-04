@@ -22,6 +22,7 @@ from valuemodel.backtest import (
     settle,
 )
 from valuemodel.config import Settings
+from valuemodel.report import format_report
 from valuemodel.staking import kelly_stake
 
 OUTCOMES = ["home", "draw", "away", "over25", "under25"]
@@ -338,3 +339,22 @@ def test_main_strategy_falls_back_for_older_runs(simulated_league: pd.DataFrame)
         }
     )
     assert main_strategy(older) == "dixon-coles"
+
+
+def test_linked_backtest_fits_on_both_divisions_but_bets_on_one(
+    simulated_league: pd.DataFrame,
+) -> None:
+    renamed = {team: f"{team} B" for team in simulated_league["home_team"].unique()}
+    second = simulated_league.assign(league="E1").replace(
+        {"home_team": renamed, "away_team": renamed}
+    )
+    both = pd.concat([simulated_league, second], ignore_index=True)
+
+    linked = run_backtest(both, "E0", ["2324"], Settings(), min_matches=0)
+    alone = run_backtest(both, "E0", ["2324"], Settings(), min_matches=0, linked=False)
+    assert linked.history_leagues == ("E0", "E1")
+    assert alone.history_leagues == ("E0",)
+    for result in (linked, alone):
+        bets = pd.concat(result.bets.values())
+        assert set(bets["league"]) == {"E0"}
+    assert "Models fitted on results from E0, E1." in format_report(linked)

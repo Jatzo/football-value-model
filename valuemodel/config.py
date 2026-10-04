@@ -30,6 +30,10 @@ LINKED_LEAGUES: dict[str, tuple[str, ...]] = {
     "E1": ("E0", "E1", "E2"),
 }
 
+# Leagues downloaded only to rate the teams moving into a linked league. They
+# have never been tuned or backtested, so their own matches are not priced.
+HISTORY_ONLY_LEAGUES: tuple[str, ...] = ("E2",)
+
 DEFAULT_LEAGUES: tuple[str, ...] = ("E0",)
 # The leagues with downloaded history, so the fixtures page can price them.
 FIXTURE_LEAGUES: tuple[str, ...] = ("E0", "E1")

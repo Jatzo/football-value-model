@@ -25,6 +25,7 @@ from valuemodel.config import (
     Settings,
     current_season,
     history_seasons,
+    linked_leagues,
     load_settings,
     season_label,
     validate_league,
@@ -94,6 +95,14 @@ def _add_leagues(
     )
 
 
+def _add_single_league(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--single-league",
+        action="store_true",
+        help="fit on the league's own results only, without the divisions linked to it",
+    )
+
+
 def _add_model_arguments(parser: argparse.ArgumentParser) -> None:
     _add_league(parser)
     parser.add_argument(
@@ -130,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
         "tune-xi", help="score walk-forward forecasts for a range of time decay rates"
     )
     _add_model_arguments(tune)
+    _add_single_league(tune)
     tune.add_argument(
         "--xi",
         nargs="+",
@@ -149,6 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="score the shots-adjusted model for a range of expected goals weights",
     )
     _add_league(shots)
+    _add_single_league(shots)
     shots.add_argument(
         "--weights",
         nargs="+",
@@ -161,6 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
         "backtest", help="walk forward through past seasons with paper bets and print a report"
     )
     _add_league(backtest)
+    _add_single_league(backtest)
     backtest.add_argument(
         "--seasons",
         nargs="+",
@@ -224,9 +236,12 @@ def run_download(leagues: Sequence[str], seasons: Sequence[str], refresh: bool) 
     return 0
 
 
-def run_tune_xi(league: str, model: str, xi_values: Sequence[float]) -> int:
-    matches = load_matches([league], HISTORY_SEASONS + TUNING_SEASONS, load_settings())
-    results = evaluate_xi(matches, TUNING_SEASONS, xi_values, fit=MODELS[model])
+def run_tune_xi(league: str, model: str, xi_values: Sequence[float], linked: bool) -> int:
+    leagues = linked_leagues(league, linked)
+    matches = load_matches(leagues, HISTORY_SEASONS + TUNING_SEASONS, load_settings())
+    results = evaluate_xi(
+        matches, TUNING_SEASONS, xi_values, fit=MODELS[model], history_leagues={league: leagues}
+    )
     print(f"{model} on {league}, forecasting seasons {', '.join(TUNING_SEASONS)}")
     print(f"{'xi':>8}  {'matches':>7}  {'log loss':>8}  {'RPS':>7}  {'Brier':>7}")
     for row in results.itertuples():
@@ -287,7 +302,8 @@ def run_predict(
     quoted: dict[str, float],
 ) -> int:
     settings = load_settings()
-    matches = load_available([league], [*DEFAULT_SEASONS, current_season()], settings)
+    seasons = [*DEFAULT_SEASONS, current_season()]
+    matches = load_available(linked_leagues(league), seasons, settings)
     if matches.empty:
         raise FileNotFoundError(f"No cached data for {league}. Run: valuemodel download")
     if as_of is None:
@@ -366,9 +382,12 @@ def _schedule_line(league: str, path: Path | None, today: date) -> str:
     return f"{league} schedule: {len(games)} games to play, next on {games['date'].min().date()}"
 
 
-def run_tune_shots(league: str, weights: Sequence[float]) -> int:
-    matches = load_matches([league], HISTORY_SEASONS + TUNING_SEASONS, load_settings())
-    results = evaluate_shot_weights(matches, TUNING_SEASONS, weights)
+def run_tune_shots(league: str, weights: Sequence[float], linked: bool) -> int:
+    leagues = linked_leagues(league, linked)
+    matches = load_matches(leagues, HISTORY_SEASONS + TUNING_SEASONS, load_settings())
+    results = evaluate_shot_weights(
+        matches, TUNING_SEASONS, weights, history_leagues={league: leagues}
+    )
     print(f"Shots-adjusted on {league}, forecasting seasons {', '.join(TUNING_SEASONS)}")
     print(f"{'weight':>8}  {'matches':>7}  {'log loss':>8}  {'RPS':>7}  {'Brier':>7}")
     for row in results.itertuples():
@@ -381,10 +400,11 @@ def run_tune_shots(league: str, weights: Sequence[float]) -> int:
     return 0
 
 
-def run_backtest_command(league: str, seasons: Sequence[str], save: bool) -> int:
+def run_backtest_command(league: str, seasons: Sequence[str], save: bool, linked: bool) -> int:
     settings = load_settings()
-    matches = load_matches([league], history_seasons(seasons), settings)
-    result = run_backtest(matches, league, seasons, settings)
+    leagues = linked_leagues(league, linked)
+    matches = load_matches(leagues, history_seasons(seasons), settings)
+    result = run_backtest(matches, league, seasons, settings, linked=linked)
     print(format_report(result))
     if save:
         path = database_path(settings)
@@ -412,10 +432,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     commands: dict[str, Callable[[], int]] = {
         "download": lambda: run_download(args.leagues, args.seasons, args.refresh),
-        "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi),
+        "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi, not args.single_league),
         "fixtures": lambda: run_fixtures(args.leagues),
-        "tune-shots": lambda: run_tune_shots(args.league, args.weights),
-        "backtest": lambda: run_backtest_command(args.league, args.seasons, not args.no_save),
+        "tune-shots": lambda: run_tune_shots(args.league, args.weights, not args.single_league),
+        "backtest": lambda: run_backtest_command(
+            args.league, args.seasons, not args.no_save, not args.single_league
+        ),
         "predict": lambda: run_predict(
             args.league, args.model, args.home, args.away, args.as_of, args.xi, _quoted_odds(args)
         ),

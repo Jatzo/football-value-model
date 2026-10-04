@@ -1,6 +1,6 @@
 """Walk-forward forecasting: refit on past results only, then price what comes next."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -33,6 +33,7 @@ def walk_forward_forecasts(
     fit: FitFunction,
     xi: float,
     min_matches: int = MIN_TEAM_MATCHES,
+    history_leagues: Mapping[str, Sequence[str]] | None = None,
 ) -> pd.DataFrame:
     """Forecast every match in the given seasons from results before its odds were taken.
 
@@ -40,11 +41,18 @@ def walk_forward_forecasts(
     match that shares it. Matches involving a team with too little history are
     kept but marked unreliable and left unpriced. The result is indexed like
     `matches`, so odds and results can be joined back on.
+
+    `history_leagues` maps each league to forecast to the leagues its models are
+    fitted on. Without it, every league in `matches` is forecast from its own
+    results alone.
     """
     targets = matches[matches["season"].isin(list(seasons))]
+    if history_leagues is not None:
+        targets = targets[targets["league"].isin(list(history_leagues))]
     frames = []
     for league, league_targets in targets.groupby("league"):
-        history = matches[matches["league"] == league]
+        sources = history_leagues[league] if history_leagues is not None else [league]
+        history = matches[matches["league"].isin(list(sources))]
         for as_of, group in league_targets.groupby(odds_capture_date(league_targets["date"])):
             model = fit(history, as_of, xi)
             prices = price_matches(model, group, min_matches).assign(as_of=as_of)
