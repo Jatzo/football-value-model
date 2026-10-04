@@ -6,7 +6,7 @@ A football model that prices matches from goals and shots, compares its prices w
 
 ## Results in brief
 
-The model does not beat the market. The main model learns team strengths from both goals and shot-based expected goals. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,369 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line, fewer than one bet in five beat the close, and the bankroll fell from 1,000 to 270 units. It forecasts slightly better than a classic Dixon-Coles model fitted to goals alone and is well calibrated, but the bookmakers' own prices are better forecasts still. The full method and figures are in [Backtest](#backtest).
+The model does not beat the market. The main model learns team strengths from both goals and shot-based expected goals. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,369 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line, fewer than one bet in five beat the close, and the bankroll fell from 1,000 to 270 units. It forecasts slightly better than a classic Dixon-Coles model fitted to goals alone and is well calibrated, but the bookmakers' own prices are better forecasts still. The same holds in the Championship, where shots help more but the model still has no edge. The full method and figures are in [Backtest](#backtest).
 
 ## How the model works
 
@@ -205,6 +205,27 @@ The bets each model was surest about win most often, but at short odds. For the 
 | Over 60% | 148 | 66.9% | 54.1% | -10.3% |
 
 In every band the bets won less often than the model expected, and the bets it was most confident about did no better than the rest. That is a selection effect: value bets are chosen where the model disagrees with the market, and on exactly those matches the model is overconfident. The 30% to 45% band happened to make money, but picking out one profitable band after the event is how backtests mislead, so it is not treated as a finding.
+
+### Championship
+
+The same backtest was run on the Championship, with every setting left exactly as tuned on the Premier League. The model never saw Championship data while its settings were chosen, which makes this a clean out-of-sample test. To reproduce it, run `valuemodel download --leagues E1` and then `valuemodel backtest --league E1`.
+
+| Strategy | Bets | Mean CLV | Beat the close | ROI | Final bankroll | Level-stakes ROI (95% interval) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Shots-adjusted | 1,779 | -5.6% | 19.3% | -4.9% | 154 | -3.5% (-10.0% to +3.0%) |
+| Dixon-Coles | 1,940 | -6.0% | 17.6% | -11.0% | 43 | -8.7% (-14.1% to -2.8%) |
+| Poisson | 1,944 | -6.1% | 17.2% | -10.7% | 46 | -8.5% (-14.2% to -2.5%) |
+| Follow the market | 23 | +2.1% | 65.2% | +20.2% | 1,023 | +46.6% (-42.4% to +156.1%) |
+
+| Forecaster | Log loss | Ranked probability score | Brier |
+| --- | --- | --- | --- |
+| Shots-adjusted | 1.0349 | 0.2155 | 0.6227 |
+| Dixon-Coles | 1.0419 | 0.2178 | 0.6275 |
+| Poisson | 1.0416 | 0.2178 | 0.6273 |
+| Bet365 pre-match, margin removed | 1.0296 | 0.2139 | 0.6184 |
+| Pinnacle closing, margin removed | 1.0256 | 0.2128 | 0.6157 |
+
+Shots help more here than in the Premier League. The main model beats Dixon-Coles on all three scores, by 0.0023 in ranked probability score against 0.0004 in the Premier League, and its forecasts come closer to Bet365's. The Championship market is probably priced less sharply than the Premier League. The verdict is still the same, though: a mean closing line value of -5.6% means the prices taken were worse than where the market closed, so the model has no edge. The market strategy's positive closing line value comes from only 23 bets, too few to read anything into.
 
 ## Limitations
 
