@@ -6,7 +6,7 @@ A Dixon-Coles model that prices football matches, compares its prices with bookm
 
 ## Status
 
-Work in progress. The data pipeline, both models, paper staking and the backtest are in place. The dashboard comes next.
+Work in progress. The data pipeline, both models, paper staking, the backtest and the dashboard are in place.
 
 The short version of the results: the model does not beat the market. Over three Premier League seasons its bets were struck at prices worse than where the market closed, and they lost money. The details are below.
 
@@ -48,6 +48,23 @@ valuemodel backtest
 ```
 
 Each run is also saved to `data/valuemodel.sqlite`. Add `--no-save` to skip that.
+
+## Dashboard
+
+```bash
+valuemodel backtest
+valuemodel fixtures
+flask --app valuemodel.web run
+```
+
+Then open http://127.0.0.1:5000. The dashboard has four pages:
+
+- **Summary**: headline figures with closing line value first, a bankroll chart for each strategy, and results by season.
+- **Bets**: the full bet log, filtered by strategy, league, season, market and result.
+- **Models**: the model comparison table and a calibration chart.
+- **Fixtures**: upcoming matches priced by the model next to Bet365's odds, with value highlighted.
+
+Use the run picker in the header to look at earlier backtests. The dashboard only reads the local database and cached files and never contacts the data source itself, so `valuemodel fixtures` is what fetches the latest fixtures file and refreshes this season's results. The fixtures file covers many leagues and changes through the week. The model can only price leagues it has results for, and the page says so when the file has no matches for them. Charts are drawn with Chart.js, loaded from a CDN, so they need an internet connection.
 
 ## How the model works
 
