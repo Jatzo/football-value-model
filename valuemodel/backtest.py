@@ -12,7 +12,13 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from valuemodel.config import DEFAULT_XI, MIN_TEAM_MATCHES, TRAINING_WINDOW_DAYS, Settings
+from valuemodel.config import (
+    BOOKMAKERS,
+    DEFAULT_XI,
+    MIN_TEAM_MATCHES,
+    TRAINING_WINDOW_DAYS,
+    Settings,
+)
 from valuemodel.markets import OUTCOMES
 from valuemodel.models.dixon_coles import fit_dixon_coles
 from valuemodel.models.poisson import fit_poisson
@@ -289,6 +295,25 @@ def _summarise(bets: pd.DataFrame, starting_bankroll: float) -> dict[str, float]
     }
 
 
+def _season_rows(
+    strategy: str, bets: pd.DataFrame, seasons: Iterable[str]
+) -> list[dict[str, object]]:
+    rows = []
+    for season in seasons:
+        in_season = bets[bets["season"] == season] if len(bets) else bets
+        rows.append(
+            {
+                "strategy": strategy,
+                "season": season,
+                "bets": len(in_season),
+                "staked": float(in_season["stake"].sum()) if len(in_season) else 0.0,
+                "profit": float(in_season["profit"].sum()) if len(in_season) else 0.0,
+                "mean_clv": float(in_season["clv"].mean()) if len(in_season) else np.nan,
+            }
+        )
+    return rows
+
+
 def run_backtest(
     matches: pd.DataFrame,
     league: str,
@@ -308,7 +333,12 @@ def run_backtest(
         name: walk_forward_forecasts(history, seasons, fit, xi, min_matches, window_days)
         for name, fit in MODELS.items()
     }
-    forecasts[MARKET_STRATEGY] = market_forecasts(targets, MARKET_SOURCE, settings.margin_method)
+    # Following the market means betting where the bookmaker beats Pinnacle, which
+    # is meaningless when the bookmaker is Pinnacle itself.
+    if settings.bookmaker != MARKET_SOURCE:
+        forecasts[MARKET_STRATEGY] = market_forecasts(
+            targets, MARKET_SOURCE, settings.margin_method
+        )
 
     summaries, season_rows = [], []
     for name, frame in forecasts.items():
@@ -317,25 +347,15 @@ def run_backtest(
             bets = bets.join(closing_line_value(bets, targets, settings.margin_method))
         result.bets[name] = bets
         summaries.append({"strategy": name, **_summarise(bets, settings.starting_bankroll)})
-        for season in seasons:
-            in_season = bets[bets["season"] == season] if not bets.empty else bets
-            season_rows.append(
-                {
-                    "strategy": name,
-                    "season": season,
-                    "bets": len(in_season),
-                    "staked": float(in_season["stake"].sum()) if len(in_season) else 0.0,
-                    "profit": float(in_season["profit"].sum()) if len(in_season) else 0.0,
-                    "mean_clv": float(in_season["clv"].mean()) if len(in_season) else np.nan,
-                }
-            )
+        season_rows += _season_rows(name, bets, seasons)
     result.summary = pd.DataFrame(summaries)
     result.season_summary = pd.DataFrame(season_rows)
 
+    pre_match = f"{BOOKMAKERS[settings.bookmaker].lower()} pre-match"
     scored = {
         "dixon-coles": forecasts["dixon-coles"],
         "poisson": forecasts["poisson"],
-        "bet365 pre-match": market_forecasts(targets, "b365", settings.margin_method),
+        pre_match: market_forecasts(targets, settings.bookmaker, settings.margin_method),
         "pinnacle closing": market_forecasts(targets, CLOSING_SOURCE, settings.margin_method),
     }
     result.scores = model_scores(scored, targets)

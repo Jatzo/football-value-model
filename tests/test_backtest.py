@@ -283,3 +283,21 @@ def test_closing_odds_never_change_the_bets(simulated_league: pd.DataFrame) -> N
     dixon_coles = original.bets["dixon-coles"]
     assert len(dixon_coles) > 0
     assert not np.allclose(dixon_coles["clv"], shifted.bets["dixon-coles"]["clv"])
+
+
+def test_pinnacle_as_bookmaker_is_scored_and_skips_the_market_strategy(
+    simulated_league: pd.DataFrame,
+) -> None:
+    settings = Settings(bookmaker="pinnacle")
+    result = run_backtest(simulated_league, "E0", ["2324"], settings, min_matches=0)
+    assert list(result.summary["strategy"]) == ["dixon-coles", "poisson"]
+    assert "pinnacle pre-match" in list(result.scores["forecaster"])
+
+
+def test_flat_stakes_end_to_end(simulated_league: pd.DataFrame) -> None:
+    settings = Settings(staking="flat", flat_stake=0.01, starting_bankroll=1000)
+    bets = run_backtest(simulated_league, "E0", ["2324"], settings, min_matches=0).bets
+    stakes = bets["dixon-coles"]["stake"]
+    assert len(stakes) > 0
+    assert (stakes <= 10.0 + 1e-9).all()
+    assert (stakes == 10.0).mean() > 0.5

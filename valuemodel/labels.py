@@ -22,6 +22,7 @@ FORECASTER_LABELS: dict[str, str] = {
     "dixon-coles": "Dixon-Coles",
     "poisson": "Poisson",
     "bet365 pre-match": "Bet365 pre-match, margin removed",
+    "pinnacle pre-match": "Pinnacle pre-match, margin removed",
     "pinnacle closing": "Pinnacle closing, margin removed",
 }
 
