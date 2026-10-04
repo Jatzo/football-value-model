@@ -15,16 +15,19 @@ from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
 from valuemodel.labels import (
     MARKET_LABELS,
+    NO_COMMON_MATCHES,
     OUTCOME_LABELS,
     STRATEGY_LABELS,
     is_missing,
     label,
+    percent,
     tone,
 )
 
 PER_PAGE = 50
 
 MODEL_FORECASTERS = tuple(MODELS)
+MAIN_MODEL = "dixon-coles"
 
 
 @dataclass
@@ -35,9 +38,9 @@ class Card:
     note: str = ""
 
 
-def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> list[Card]:
-    """The figures that matter most, closing line value first."""
-    row = result.summary.set_index("strategy").loc[strategy]
+def headline_cards(result: BacktestResult) -> list[Card]:
+    """The main model's most important figures, closing line value first."""
+    row = result.summary.set_index("strategy").loc[MAIN_MODEL]
     start = result.settings.starting_bankroll
     if not row["bets"]:
         return [
@@ -50,21 +53,27 @@ def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> lis
     return [
         Card(
             "Mean closing line value",
-            f"{row['mean_clv']:+.1%}",
+            percent(row["mean_clv"], signed=True),
             tone(row["mean_clv"]),
             f"on {int(row['clv_bets']):,} bets with Pinnacle closing odds",
         ),
         Card(
             "Beat the closing line",
-            f"{row['beat_close_share']:.1%}",
+            percent(row["beat_close_share"]),
             note="share of bets struck at a better price than the close",
         ),
-        Card("ROI", f"{row['roi']:+.1%}", tone(row["roi"]), f"on {int(row['bets']):,} bets"),
+        Card(
+            "ROI",
+            percent(row["roi"], signed=True),
+            tone(row["roi"]),
+            f"on {int(row['bets']):,} bets",
+        ),
         Card(
             "Level-stakes ROI",
-            f"{row['level_roi']:+.1%}",
+            percent(row["level_roi"], signed=True),
             tone(row["level_roi"]),
-            f"95% interval {row['level_roi_low']:+.1%} to {row['level_roi_high']:+.1%}",
+            f"95% interval {percent(row['level_roi_low'], signed=True)} to "
+            f"{percent(row['level_roi_high'], signed=True)}",
         ),
         Card(
             "Final bankroll",
@@ -74,16 +83,16 @@ def headline_cards(result: BacktestResult, strategy: str = "dixon-coles") -> lis
         ),
         Card(
             "Maximum drawdown",
-            f"{row['max_drawdown_share']:.0%}",
+            percent(row["max_drawdown_share"]),
             note=f"{row['max_drawdown']:,.0f} units, longest losing run "
             f"{int(row['longest_losing_run'])}",
         ),
     ]
 
 
-def clv_explanation(result: BacktestResult, strategy: str = "dixon-coles") -> str:
+def clv_explanation(result: BacktestResult) -> str:
     """Explain closing line value in terms of what this run actually shows."""
-    mean_clv = result.summary.set_index("strategy").loc[strategy, "mean_clv"]
+    mean_clv = result.summary.set_index("strategy").loc[MAIN_MODEL, "mean_clv"]
     intro = (
         "Closing line value compares each price taken with Pinnacle's closing price after its "
         "margin is removed. It is the most reliable sign of a real edge, because it is far less "
@@ -145,8 +154,8 @@ def calibration_series(result: BacktestResult) -> list[dict[str, object]]:
 
 def scores_verdict(scores: pd.DataFrame) -> str:
     """One sentence saying whether the models or the market forecast better on RPS."""
-    if scores.empty:
-        return ""
+    if scores.empty or not scores["matches"].iloc[0] or scores["rps"].isna().all():
+        return NO_COMMON_MATCHES
     is_model = scores["forecaster"].isin(MODEL_FORECASTERS)
     model_best = scores.loc[is_model, "rps"].min()
     market_best = scores.loc[~is_model, "rps"].min()

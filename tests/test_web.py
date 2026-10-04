@@ -10,6 +10,8 @@ from simulation import simulate_league, simulated_seasons, true_model
 
 from valuemodel.backtest import BacktestResult, run_backtest
 from valuemodel.config import Settings
+from valuemodel.labels import NO_COMMON_MATCHES
+from valuemodel.report import format_report
 from valuemodel.store import connect, database_path, save_run
 from valuemodel.web import create_app, views
 
@@ -168,7 +170,29 @@ def test_fixtures_page_prices_known_leagues(empty_client: FlaskClient, settings:
 def test_headline_cards_lead_with_closing_line_value(result: BacktestResult) -> None:
     cards = views.headline_cards(result)
     assert cards[0].label == "Mean closing line value"
-    assert cards[0].value.endswith("%")
+    mean_clv = result.summary.set_index("strategy").loc["dixon-coles", "mean_clv"]
+    assert cards[0].value == f"{mean_clv:+.1%}"
+
+
+def test_run_without_closing_odds(settings: Settings) -> None:
+    league = simulated_seasons(23, 8, 2)
+    closing = [column for column in league if column.startswith("pinnacle_close_")]
+    league[closing] = float("nan")
+    result = run_backtest(league, "E0", ["2324"], Settings(), min_matches=0)
+    assert result.scores["matches"].eq(0).all()
+
+    cards = views.headline_cards(result)
+    assert cards[0].value == "n/a"
+    assert not any("nan" in card.value + card.note for card in cards)
+    assert views.scores_verdict(result.scores) == NO_COMMON_MATCHES
+    assert NO_COMMON_MATCHES in format_report(result)
+
+    connection = connect(database_path(settings))
+    save_run(connection, result)
+    connection.close()
+    html = create_app(settings).test_client().get("/models").get_data(as_text=True)
+    assert "could not be compared" in html
+    assert "nan" not in html.split("<main")[1].split("calibration-data")[0]
 
 
 def test_bankroll_lines_start_at_the_bankroll_and_end_together(result: BacktestResult) -> None:
@@ -200,6 +224,7 @@ def test_scores_verdict(model_rps: float, says: str) -> None:
     scores = pd.DataFrame(
         {
             "forecaster": ["dixon-coles", "poisson", "pinnacle closing"],
+            "matches": [100, 100, 100],
             "rps": [model_rps, 0.22, 0.19],
         }
     )

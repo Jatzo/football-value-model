@@ -27,6 +27,12 @@ FORECASTER_LABELS: dict[str, str] = {
 }
 
 
+NO_COMMON_MATCHES = (
+    "No match had a price from every forecaster, so the forecasts could not be compared. "
+    "This happens when Pinnacle's closing odds are missing for the seasons tested."
+)
+
+
 def label(names: dict[str, str], key: str) -> str:
     """The display name for a key, or the key itself when it has none."""
     return names.get(key, key)

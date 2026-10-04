@@ -233,13 +233,14 @@ def model_scores(forecasts: dict[str, pd.DataFrame], matches: pd.DataFrame) -> p
     rows = []
     for name, frame in forecasts.items():
         probabilities = frame.loc[common, outcomes_1x2].to_numpy(dtype=float)
+        scored = len(common) > 0
         rows.append(
             {
                 "forecaster": name,
                 "matches": len(common),
-                "log_loss": log_loss(probabilities, outcomes),
-                "rps": ranked_probability_score(probabilities, outcomes),
-                "brier": brier_score(probabilities, outcomes),
+                "log_loss": log_loss(probabilities, outcomes) if scored else np.nan,
+                "rps": ranked_probability_score(probabilities, outcomes) if scored else np.nan,
+                "brier": brier_score(probabilities, outcomes) if scored else np.nan,
             }
         )
     return pd.DataFrame(rows)

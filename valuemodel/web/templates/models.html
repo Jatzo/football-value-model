@@ -9,7 +9,7 @@
 <section class="panel">
   <h2>Forecasters compared</h2>
   {% set scores = result.scores %}
-  {% if scores | length %}
+  {% if scores | length and scores.matches.iloc[0] > 0 %}
   <p class="muted small">Match result forecasts on the {{ scores.matches.iloc[0] }} matches every forecaster priced. Lower is better for all three scores.</p>
   <div class="table-scroll">
   <table>
@@ -28,6 +28,8 @@
   </table>
   </div>
   <p>{{ verdict }}</p>
+  {% else %}
+  <p class="muted">{{ verdict }}</p>
   {% endif %}
 </section>
 

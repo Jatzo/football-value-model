@@ -6,7 +6,14 @@ import pandas as pd
 
 from valuemodel.backtest import BacktestResult
 from valuemodel.config import BOOKMAKERS, Settings, season_label
-from valuemodel.labels import FORECASTER_LABELS, STRATEGY_LABELS, label, percent, units
+from valuemodel.labels import (
+    FORECASTER_LABELS,
+    NO_COMMON_MATCHES,
+    STRATEGY_LABELS,
+    label,
+    percent,
+    units,
+)
 
 Cell = str | int | float
 
@@ -118,6 +125,8 @@ def _season_section(season_summary: pd.DataFrame) -> str:
 
 def _scores_section(scores: pd.DataFrame) -> str:
     matches = int(scores["matches"].iloc[0]) if len(scores) else 0
+    if not matches:
+        return "\n".join(["Model quality", NO_COMMON_MATCHES])
     rows = [
         [
             label(FORECASTER_LABELS, row.forecaster),
