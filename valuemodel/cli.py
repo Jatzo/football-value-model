@@ -37,7 +37,7 @@ from valuemodel.data import (
     make_client,
 )
 from valuemodel.fixtures import download_fixtures, load_fixtures
-from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, share
+from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, STRATEGY_LABELS, label, share
 from valuemodel.markets import predict
 from valuemodel.models.common import UnknownTeamError
 from valuemodel.odds import MARKETS, check_quotes
@@ -231,9 +231,9 @@ def _print_prices(
     if checks:
         header += f"  {'Odds':>6}  {'Book chance':>11}  {'Edge':>7}"
     print(header)
-    for outcome, label in OUTCOME_LABELS.items():
+    for outcome, outcome_label in OUTCOME_LABELS.items():
         chance = probabilities[outcome]
-        line = f"{label:<10}  {chance:>7.1%}  {1 / chance:>9.2f}"
+        line = f"{outcome_label:<10}  {chance:>7.1%}  {1 / chance:>9.2f}"
         if check := by_outcome.get(outcome):
             flag = "  value" if check.value else ""
             line += (
@@ -295,8 +295,9 @@ def run_predict(
             )
             return 1
 
+    model_name = label(STRATEGY_LABELS, model)
     print(f"{home} v {away}")
-    print(f"{model}, fitted on {league} matches before {as_of.date()}, xi {xi}")
+    print(f"{model_name}, fitted on {league} matches before {as_of.date()}, xi {xi}")
     print(f"Expected goals: {home} {home_goals:.2f}, {away} {away_goals:.2f}")
     _print_prices(probabilities.__dict__, quoted, settings)
     return 0
