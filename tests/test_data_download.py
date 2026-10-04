@@ -97,3 +97,9 @@ def test_load_available_skips_missing_seasons(source: FakeSource, settings: Sett
     assert len(matches) == 20
     assert set(matches["season"]) == {"2526"}
     assert load_available(["E1"], ["2526"], settings).empty
+
+
+def test_a_season_listed_twice_is_loaded_once(source: FakeSource, settings: Settings) -> None:
+    download_seasons(source.client(), ["E0"], ["2526"], settings, sleep=lambda _: None)
+    assert len(load_available(["E0"], ["2526", "2526"], settings)) == 20
+    assert len(load_matches(["E0"], ["2526", "2526"], settings)) == 20

@@ -299,9 +299,10 @@ def load_available(
     """Load whichever of these seasons are cached, skipping the rest.
 
     Used where the season in progress may or may not have been fetched yet.
-    The result is empty when nothing is cached.
+    The result is empty when nothing is cached. A season listed twice is loaded
+    once, since duplicate matches would double their weight in every fit.
     """
-    seasons = list(seasons)
+    seasons = list(dict.fromkeys(seasons))
     frames = [
         load_season(path, league, season)
         for league in leagues
