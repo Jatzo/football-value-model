@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 
+from valuemodel.markets import predict
 from valuemodel.models.common import FittedModel
 
 
@@ -52,4 +53,27 @@ def simulate_league(
     frame["away_goals"] = frame["away_goals"].astype("Int64")
     difference = frame["home_goals"] - frame["away_goals"]
     frame["result"] = np.select([difference > 0, difference == 0], ["H", "D"], "A")
+    return frame
+
+
+def add_odds(frame: pd.DataFrame, model: FittedModel, rng: np.random.Generator) -> pd.DataFrame:
+    """Give each match Bet365, Pinnacle and Pinnacle closing odds around its true prices.
+
+    Each source adds a margin and some noise, with the closing line the sharpest,
+    which is roughly how real prices behave.
+    """
+    sources = {"b365": (0.05, 0.05), "pinnacle": (0.03, 0.02), "pinnacle_close": (0.025, 0.01)}
+    true = pd.DataFrame(
+        [
+            predict(model, home, away).__dict__
+            for home, away in zip(frame["home_team"], frame["away_team"], strict=True)
+        ],
+        index=frame.index,
+    )
+    frame = frame.copy()
+    frame["kickoff"] = pd.NA
+    for source, (margin, noise) in sources.items():
+        for outcome in true.columns:
+            wobble = rng.lognormal(0, noise, len(frame))
+            frame[f"{source}_{outcome}"] = np.maximum(1.01, wobble / (true[outcome] * (1 + margin)))
     return frame
