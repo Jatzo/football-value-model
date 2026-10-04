@@ -8,8 +8,10 @@ from valuemodel.fixtures import price_fixtures
 from valuemodel.picks import (
     PICK_COLUMNS,
     Leg,
+    Selection,
     accumulator,
     best_slips,
+    likely_slips,
     price_to_beat,
     value_bets,
 )
@@ -200,3 +202,35 @@ def test_suggested_stakes_treat_the_slip_as_one_bet() -> None:
             stake(acca.probability, acca.odds, Settings().starting_bankroll, Settings())
         )
         assert 0 < slip.stake <= 20
+
+
+SELECTIONS = [
+    Selection("2026-10-10 Arsenal v Leeds", "home", 0.58),
+    Selection("2026-10-10 Arsenal v Leeds", "under25", 0.62),
+    Selection("2026-10-10 Man United v Tottenham", "home", 0.60),
+    Selection("2026-10-11 Liverpool v Man City", "away", 0.43),
+    Selection("2026-10-09 West Ham v QPR", "home", 0.59),
+]
+
+
+def test_likely_slips_take_each_match_once_likeliest_first() -> None:
+    slips = likely_slips(SELECTIONS)
+    assert [slip.name for slip in slips] == [
+        "Likeliest single",
+        "Likeliest double",
+        "Likeliest treble",
+    ]
+    treble = slips[2]
+    assert [(s.match[11:], s.outcome) for s in treble.selections] == [
+        ("Arsenal v Leeds", "under25"),
+        ("Man United v Tottenham", "home"),
+        ("West Ham v QPR", "home"),
+    ]
+    assert treble.probability == pytest.approx(0.62 * 0.60 * 0.59)
+    assert treble.fair_odds == pytest.approx(1 / (0.62 * 0.60 * 0.59))
+    assert treble.probability * treble.price_to_beat(0.03) - 1 == pytest.approx(0.03)
+
+
+def test_likely_slips_with_few_matches() -> None:
+    assert [slip.name for slip in likely_slips(SELECTIONS[:2])] == ["Likeliest single"]
+    assert likely_slips([]) == []

@@ -180,3 +180,54 @@ def best_slips(
         amount = stake(best.probability, best.odds, settings.starting_bankroll, settings)
         slips.append(SuggestedSlip(SLIP_NAMES.get(size, f"Best {size}-fold"), best, amount))
     return slips
+
+
+LIKELY_NAMES: dict[int, str] = {1: "Likeliest single", 2: "Likeliest double", 3: "Likeliest treble"}
+
+
+@dataclass(frozen=True)
+class Selection:
+    """An outcome the model rates, before any bookmaker's odds are known."""
+
+    match: str
+    outcome: str
+    probability: float
+
+
+@dataclass(frozen=True)
+class LikelySlip:
+    name: str
+    selections: tuple[Selection, ...]
+
+    @property
+    def probability(self) -> float:
+        return math.prod(selection.probability for selection in self.selections)
+
+    @property
+    def fair_odds(self) -> float:
+        return 1 / self.probability
+
+    def price_to_beat(self, edge_threshold: float) -> float:
+        """The lowest combined odds at which the slip would be a value bet."""
+        return price_to_beat(self.probability, edge_threshold)
+
+
+def likely_slips(selections: Sequence[Selection], max_legs: int = MAX_LEGS) -> list[LikelySlip]:
+    """The single, double and treble the model thinks most likely to win, one leg per match.
+
+    Each match contributes its single likeliest outcome, and a slip of n legs
+    takes the n likeliest of those, which gives the highest combined chance.
+    Without odds there is no edge, so these say nothing about value: they are
+    the model's view of what will probably happen, with the price that would
+    make each slip worth backing.
+    """
+    best: dict[str, Selection] = {}
+    for selection in selections:
+        current = best.get(selection.match)
+        if current is None or selection.probability > current.probability:
+            best[selection.match] = selection
+    ranked = sorted(best.values(), key=lambda selection: selection.probability, reverse=True)
+    return [
+        LikelySlip(LIKELY_NAMES.get(size, f"Likeliest {size}-fold"), tuple(ranked[:size]))
+        for size in range(1, min(max_legs, len(ranked)) + 1)
+    ]
