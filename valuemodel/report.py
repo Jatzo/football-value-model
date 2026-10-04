@@ -7,6 +7,7 @@ import pandas as pd
 
 from valuemodel.backtest import BacktestResult
 from valuemodel.config import BOOKMAKERS, Settings, season_label
+from valuemodel.labels import FORECASTER_LABELS, STRATEGY_LABELS, label
 
 Cell = str | int | float
 
@@ -56,7 +57,7 @@ def _header(result: BacktestResult) -> str:
 def _clv_section(summary: pd.DataFrame) -> str:
     rows = [
         [
-            row.strategy,
+            label(STRATEGY_LABELS, row.strategy),
             int(row.bets),
             f"{int(row.clv_bets)} ({percent(row.clv_coverage)})" if row.bets else "0",
             percent(row.mean_clv, signed=True),
@@ -76,7 +77,7 @@ def _betting_section(summary: pd.DataFrame) -> str:
     rows = []
     for row in summary.itertuples():
         if not row.bets:
-            rows.append([row.strategy, 0, "", "", "", "", "", "", ""])
+            rows.append([label(STRATEGY_LABELS, row.strategy), 0, "", "", "", "", "", "", ""])
             continue
         interval = (
             f"{percent(row.level_roi, True)} "
@@ -84,7 +85,7 @@ def _betting_section(summary: pd.DataFrame) -> str:
         )
         rows.append(
             [
-                row.strategy,
+                label(STRATEGY_LABELS, row.strategy),
                 int(row.bets),
                 units(row.staked),
                 units(row.profit),
@@ -112,7 +113,7 @@ def _betting_section(summary: pd.DataFrame) -> str:
 def _season_section(season_summary: pd.DataFrame) -> str:
     rows = [
         [
-            row.strategy,
+            label(STRATEGY_LABELS, row.strategy),
             season_label(row.season),
             int(row.bets),
             units(row.staked),
@@ -129,7 +130,12 @@ def _season_section(season_summary: pd.DataFrame) -> str:
 def _scores_section(scores: pd.DataFrame) -> str:
     matches = int(scores["matches"].iloc[0]) if len(scores) else 0
     rows = [
-        [row.forecaster, f"{row.log_loss:.4f}", f"{row.rps:.4f}", f"{row.brier:.4f}"]
+        [
+            label(FORECASTER_LABELS, row.forecaster),
+            f"{row.log_loss:.4f}",
+            f"{row.rps:.4f}",
+            f"{row.brier:.4f}",
+        ]
         for row in scores.itertuples()
     ]
     return (
@@ -148,8 +154,9 @@ def _calibration_section(model: str, calibration: pd.DataFrame) -> str:
         ]
         for row in calibration.itertuples()
     ]
-    return f"Calibration of {model}, home, draw and away forecasts pooled\n" + table(
-        ["Forecast range", "Mean forecast", "Happened", "Count"], rows
+    return (
+        f"Calibration of {label(STRATEGY_LABELS, model)}, home, draw and away forecasts pooled\n"
+        + table(["Forecast range", "Mean forecast", "Happened", "Count"], rows)
     )
 
 

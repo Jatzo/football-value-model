@@ -8,6 +8,13 @@ from flask import Blueprint, Flask, abort, current_app, render_template, request
 
 from valuemodel.backtest import BacktestResult
 from valuemodel.config import BOOKMAKERS, LEAGUES, Settings, season_label
+from valuemodel.labels import (
+    FORECASTER_LABELS,
+    MARKET_LABELS,
+    OUTCOME_LABELS,
+    STRATEGY_LABELS,
+    label,
+)
 from valuemodel.report import staking_description
 from valuemodel.store import connect, database_path, latest_run_id, list_runs, load_run
 from valuemodel.web import views
@@ -27,11 +34,11 @@ def register_filters(app: Flask) -> None:
             else ("positive" if value > 0 else "negative")
         ),
         season=season_label,
-        strategy=lambda name: views.STRATEGY_NAMES.get(name, name),
-        outcome=lambda name: views.OUTCOME_NAMES.get(name, name),
-        market=lambda name: views.MARKET_NAMES.get(name, name),
-        forecaster=lambda name: views.FORECASTER_NAMES.get(name, name),
-        league=lambda code: LEAGUES.get(code, code),
+        strategy=lambda name: label(STRATEGY_LABELS, name),
+        outcome=lambda name: label(OUTCOME_LABELS, name),
+        market=lambda name: label(MARKET_LABELS, name),
+        forecaster=lambda name: label(FORECASTER_LABELS, name),
+        league=lambda code: label(LEAGUES, code),
     )
 
 

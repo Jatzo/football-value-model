@@ -9,37 +9,15 @@ from datetime import datetime
 
 import pandas as pd
 
-from valuemodel.backtest import BacktestResult
+from valuemodel.backtest import MODELS, BacktestResult
 from valuemodel.config import DEFAULT_SEASONS, DEFAULT_XI, LEAGUES, Settings, current_season
 from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
+from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, STRATEGY_LABELS, label
 
 PER_PAGE = 50
 
-STRATEGY_NAMES: dict[str, str] = {
-    "dixon-coles": "Dixon-Coles",
-    "poisson": "Poisson",
-    "market": "Follow the market",
-}
-
-OUTCOME_NAMES: dict[str, str] = {
-    "home": "Home win",
-    "draw": "Draw",
-    "away": "Away win",
-    "over25": "Over 2.5",
-    "under25": "Under 2.5",
-}
-
-MARKET_NAMES: dict[str, str] = {"1x2": "Match result", "totals": "Over/under 2.5"}
-
-FORECASTER_NAMES: dict[str, str] = {
-    "dixon-coles": "Dixon-Coles",
-    "poisson": "Poisson",
-    "bet365 pre-match": "Bet365 pre-match, margin removed",
-    "pinnacle closing": "Pinnacle closing, margin removed",
-}
-
-MODEL_FORECASTERS = ("dixon-coles", "poisson")
+MODEL_FORECASTERS = tuple(MODELS)
 
 
 def is_missing(value: object) -> bool:
@@ -117,7 +95,7 @@ def bankroll_series(result: BacktestResult) -> list[dict[str, object]]:
             daily[last] = daily.iloc[-1]
         points = [{"x": _milliseconds(first), "y": result.settings.starting_bankroll}]
         points += [{"x": _milliseconds(day), "y": round(value, 2)} for day, value in daily.items()]
-        series.append({"name": STRATEGY_NAMES.get(strategy, strategy), "points": points})
+        series.append({"name": label(STRATEGY_LABELS, strategy), "points": points})
     return series
 
 
@@ -128,7 +106,7 @@ def _milliseconds(timestamp: pd.Timestamp) -> int:
 def calibration_series(result: BacktestResult) -> list[dict[str, object]]:
     return [
         {
-            "name": STRATEGY_NAMES.get(model, model),
+            "name": label(STRATEGY_LABELS, model),
             "points": [
                 {"x": row.mean_forecast, "y": row.observed, "count": int(row.count)}
                 for row in table.itertuples()
@@ -224,7 +202,7 @@ def bet_page(result: BacktestResult, filters: BetFilters) -> BetPage:
         "strategy": list(result.bets),
         "league": sorted(bets["league"].unique()) if len(bets) else [],
         "season": sorted(bets["season"].unique()) if len(bets) else [],
-        "market": list(MARKET_NAMES),
+        "market": list(MARKET_LABELS),
     }
     return BetPage(rows=rows, page=page, pages=pages, totals=totals, options=options)
 
@@ -253,7 +231,7 @@ def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
     for fixture in priced[priced["league"] == league].to_dict("records"):
         cells = []
         if fixture["reliable"]:
-            for outcome in OUTCOME_NAMES:
+            for outcome in OUTCOME_LABELS:
                 market = "1x2" if outcome in ("home", "draw", "away") else "totals"
                 cells.append(
                     PriceCell(

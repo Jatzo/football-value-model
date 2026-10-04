@@ -52,7 +52,7 @@ def test_report_puts_closing_line_value_first(result: BacktestResult) -> None:
         "Betting results",
         "By season",
         "Model quality",
-        "Calibration of dixon-coles",
+        "Calibration of Dixon-Coles",
     ]
     positions = [report.index(heading) for heading in headings]
     assert positions == sorted(positions)
@@ -63,4 +63,4 @@ def test_report_handles_a_strategy_without_bets(result: BacktestResult) -> None:
     summary = result.summary.copy()
     summary.loc[summary["strategy"] == "market", ["bets", "clv_bets"]] = 0
     empty = BacktestResult(**{**result.__dict__, "summary": summary})
-    assert "market" in format_report(empty)
+    assert "Follow the market" in format_report(empty)
