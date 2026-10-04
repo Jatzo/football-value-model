@@ -1,20 +1,20 @@
 # Football Value Model
 
-A Dixon-Coles model that prices football matches, compares its prices with bookmaker odds and tests the result with an honest walk-forward backtest. Paper trading only.
+A football model that prices matches from goals and shots, compares its prices with bookmaker odds and tests the result with an honest walk-forward backtest. Paper trading only.
 
 ![Dashboard summary page](docs/screenshot.png)
 
 ## Results in brief
 
-The model does not beat the market. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,413 paper bets at Bet365's pre-match prices. On average those prices were 6.4% worse than Pinnacle's closing line, only one bet in five beat the close, and the bankroll fell from 1,000 to 123 units. The models are well calibrated, but the bookmakers' own prices are better forecasts. A third model that also learns from shots forecasts better than the other two and lost less, but its prices were no better against the close, so it does not beat the market either. The full method and figures are in [Backtest](#backtest).
+The model does not beat the market. The main model learns team strengths from both goals and shot-based expected goals. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,369 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line, fewer than one bet in five beat the close, and the bankroll fell from 1,000 to 270 units. It forecasts slightly better than a classic Dixon-Coles model fitted to goals alone and is well calibrated, but the bookmakers' own prices are better forecasts still. The full method and figures are in [Backtest](#backtest).
 
 ## How the model works
 
 Each team gets two numbers: an attack strength and a defence strength. A team's expected goals in a match come from its own attack, the opponent's defence and, for the home side, a home advantage term shared by the whole league. Goals are treated as Poisson counts, which gives a probability for every scoreline up to 10 goals each. Adding up the right scorelines gives the chances of a home win, a draw, an away win, and over or under 2.5 goals.
 
-That is the baseline Poisson model. Dixon and Coles (1997) noticed that real football has slightly different numbers of 0-0, 1-0, 0-1 and 1-1 results than independent Poisson counts predict, and added one parameter, rho, to correct those four scores. That is the main model here. On recent Premier League data the fitted rho is small and unstable: across the backtest it drifts between about -0.11 and +0.08, changing sign along the way. In practice the two models give almost the same prices.
+That is the baseline Poisson model. Dixon and Coles (1997) noticed that real football has slightly different numbers of 0-0, 1-0, 0-1 and 1-1 results than independent Poisson counts predict, and added one parameter, rho, to correct those four scores. That is the classic model for football scores, kept here for comparison. On recent Premier League data the fitted rho is small and unstable: across the backtest it drifts between about -0.11 and +0.08, changing sign along the way. In practice the two models give almost the same prices. The main model goes a step further and also learns from shots, as described below.
 
-Both models are fitted by maximum likelihood with `scipy.optimize` and an analytic gradient. The attack strengths are constrained to sum to zero so the fit has a single answer. Recent matches count for more than old ones: each match is weighted by `exp(-xi * days_ago)`, and matches more than three years old are left out. Fitting three seasons takes a few hundredths of a second, which matters because the backtest refits before every round of matches.
+The models are fitted by maximum likelihood with `scipy.optimize` and an analytic gradient. The attack strengths are constrained to sum to zero so the fit has a single answer. Recent matches count for more than old ones: each match is weighted by `exp(-xi * days_ago)`, and matches more than three years old are left out. Fitting three seasons takes a few hundredths of a second, which matters because the backtest refits before every round of matches.
 
 ### Choosing the time decay
 
@@ -23,10 +23,10 @@ The decay rate `xi` was chosen by validation, not guesswork. The seasons are spl
 | Seasons | Use |
 | --- | --- |
 | 2019/20 and 2020/21 | Training history only |
-| 2021/22 and 2022/23 | Choosing `xi` |
+| 2021/22 and 2022/23 | Choosing settings |
 | 2023/24 to 2025/26 | Backtest |
 
-For each candidate `xi`, the model walked through 2021/22 and 2022/23 on exactly the backtest's schedule, described below, refitting before each round of matches using only earlier results. Lower scores are better:
+For each candidate `xi`, Dixon-Coles walked through 2021/22 and 2022/23 on exactly the backtest's schedule, described below, refitting before each round of matches using only earlier results. Lower scores are better:
 
 | `xi` per day | Log loss | Ranked probability score |
 | --- | --- | --- |
@@ -37,23 +37,27 @@ For each candidate `xi`, the model walked through 2021/22 and 2022/23 on exactly
 | 0.004 | 0.97659 | 0.20193 |
 | 0.005 | 0.97848 | 0.20238 |
 
-Both scores are lowest at 0.003, so a match from about 230 days ago counts half as much as one played today. The Poisson baseline gives the same answer, and anything from about 0.0025 to 0.004 would give very similar forecasts. `valuemodel tune-xi` reproduces the table.
+Both scores are lowest at 0.003, so a match from about 230 days ago counts half as much as one played today. The Poisson baseline gives the same answer, and anything from about 0.0025 to 0.004 would give very similar forecasts. `valuemodel tune-xi --model dixon-coles` reproduces the table. The main model's time decay is chosen together with its use of shots, below.
 
 ### Shot-based expected goals
 
 Goals are noisy: a side can dominate a match and lose it. Shots carry extra evidence about how strong each team is. football-data.co.uk records shots and shots on target, but not where or how each shot was taken, so these are not true expected goals. Instead, each shot on target and each other shot is worth the average number of goals that kind of shot led to in the training window. In recent Premier League seasons that is about 0.3 goals per shot on target and nothing for other shots. The values are kept non-negative, since otherwise a side with shots but none on target could be expected to score fewer than zero goals.
 
-The shots-adjusted model fits each team's strengths to a blend of actual goals and these expected goals. The share of expected goals in the blend was chosen on the same tuning seasons as `xi`, and `valuemodel tune-shots` reproduces the table:
+The main model, called shots-adjusted, fits each team's strengths to a blend of actual goals and these expected goals. Its time decay and the share of expected goals in the blend affect each other, so they were chosen together on the same tuning seasons:
 
-| Share of expected goals | Log loss | Ranked probability score |
-| --- | --- | --- |
-| 0 (actual goals only) | 0.97521 | 0.20187 |
-| 0.25 | 0.97173 | 0.20089 |
-| 0.5 | 0.97100 | 0.20065 |
-| 0.75 | 0.97297 | 0.20124 |
-| 1 (expected goals only) | 0.97768 | 0.20274 |
+| `xi` per day | Share of expected goals | Log loss | Ranked probability score |
+| --- | --- | --- | --- |
+| 0.005 | 0.5 | 0.96828 | 0.19975 |
+| 0.005 | 0.6 | 0.96822 | 0.19971 |
+| 0.005 | 0.7 | 0.96872 | 0.19985 |
+| 0.006 | 0.5 | 0.96826 | 0.19975 |
+| 0.006 | 0.6 | 0.96794 | 0.19963 |
+| 0.006 | 0.7 | 0.96826 | 0.19972 |
+| 0.007 | 0.5 | 0.96871 | 0.19991 |
+| 0.007 | 0.6 | 0.96817 | 0.19973 |
+| 0.007 | 0.7 | 0.96831 | 0.19976 |
 
-An even blend forecasts best: shots add information, but actual goals still matter. The Dixon-Coles correction only applies to whole-number scores, so it has nothing to act on with a blend, and this model is fitted as Poisson.
+Wider searches found nothing better, and fitting goals only or expected goals only was clearly worse (ranked probability scores of 0.2023 and 0.2014 at an `xi` of 0.005). A 60% share of expected goals and an `xi` of 0.006 forecast best, so a match about 115 days old counts half as much as one played today. Shots are less noisy than goals, so recent matches can safely count for more than in the goal-only models. `valuemodel tune-xi` and `valuemodel tune-shots` reproduce the search one setting at a time. The Dixon-Coles correction only applies to whole-number scores, so it has nothing to act on with a blend, and this model is fitted as Poisson.
 
 ### Finding value and staking
 
@@ -149,7 +153,7 @@ The backtest walks through 2023/24, 2024/25 and 2025/26 in date order. Before ea
 
 Bets are struck at Bet365's pre-match price whenever the edge reaches 3%, with quarter Kelly stakes capped at 2% of the bankroll. All stakes on one day are sized from that morning's bankroll. Games involving a team with fewer than 10 matches in the training window are skipped.
 
-Four strategies are compared: Dixon-Coles, the Poisson baseline, the shots-adjusted model, and following the market. The last treats Pinnacle's pre-match prices, with the margin removed, as its forecast, and bets whenever Bet365 offers at least 3% more.
+Four strategies are compared: the main shots-adjusted model, Dixon-Coles, the Poisson baseline, and following the market. The last treats Pinnacle's pre-match prices, with the margin removed, as its forecast, and bets whenever Bet365 offers at least 3% more.
 
 ### Closing line value
 
@@ -157,9 +161,9 @@ Closing line value (CLV) compares the price taken with Pinnacle's closing price 
 
 | Strategy | Bets | Bets with closing odds | Mean CLV | Beat the close |
 | --- | --- | --- | --- | --- |
+| Shots-adjusted | 1,369 | 1,138 | -6.8% | 19.0% |
 | Dixon-Coles | 1,413 | 1,205 | -6.4% | 19.8% |
 | Poisson | 1,428 | 1,212 | -6.5% | 19.6% |
-| Shots-adjusted | 1,331 | 1,110 | -7.0% | 20.1% |
 | Follow the market | 7 | 7 | -4.4% | 57.1% |
 
 For context, backing every Bet365 price in these seasons without any model gives a mean CLV of between -4.9% and -8.6%, depending on the outcome. The model's selections are no better than that. It finds prices where it disagrees with the market, and the market turns out to be right more often than not. Pinnacle's odds are missing from 17 January 2026 onwards, which is why about 15% of bets have no closing price to compare with.
@@ -168,12 +172,12 @@ For context, backing every Bet365 price in these seasons without any model gives
 
 | Strategy | Bets | Staked | Profit | ROI | Max drawdown | Level-stakes ROI (95% interval) |
 | --- | --- | --- | --- | --- | --- | --- |
+| Shots-adjusted | 1,369 | 10,840 | -730 | -6.7% | 81% | -7.1% (-15.4% to +1.2%) |
 | Dixon-Coles | 1,413 | 9,166 | -877 | -9.6% | 91% | -8.3% (-15.4% to -1.0%) |
 | Poisson | 1,428 | 9,086 | -877 | -9.6% | 92% | -10.1% (-17.1% to -3.0%) |
-| Shots-adjusted | 1,331 | 9,467 | -664 | -7.0% | 77% | -5.9% (-14.5% to +2.6%) |
 | Follow the market | 7 | 21 | +17 | +79.3% | 1% | +125% (-43% to +350%) |
 
-Starting from 1,000 units, Dixon-Coles and Poisson finished with about 123 and the shots-adjusted model with 336. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets. For Dixon-Coles and Poisson it sits entirely below zero. For the shots-adjusted model it just reaches above zero, but its closing line value is no better, so the smaller loss is most likely luck rather than a real edge. The market strategy found only seven bets, too few to mean anything, which itself shows how rarely Bet365 is 3% more generous than Pinnacle.
+Starting from 1,000 units, the main model finished with 270, and Dixon-Coles and Poisson with about 123. Level-stakes ROI puts one unit on every bet, which removes the effect of the order in which results arrived. The interval comes from resampling the bets. For Dixon-Coles and Poisson it sits entirely below zero. For the main model it just reaches above zero, but its closing line value is no better, so the smaller loss is most likely luck rather than a real edge. The market strategy found only seven bets, too few to mean anything, which itself shows how rarely Bet365 is 3% more generous than Pinnacle.
 
 ### Model quality
 
@@ -181,26 +185,26 @@ Scored on the 940 matches that every forecaster priced. Lower is better for all 
 
 | Forecaster | Log loss | Ranked probability score | Brier |
 | --- | --- | --- | --- |
+| Shots-adjusted | 0.9617 | 0.1962 | 0.5703 |
 | Dixon-Coles | 0.9617 | 0.1966 | 0.5708 |
 | Poisson | 0.9622 | 0.1967 | 0.5711 |
-| Shots-adjusted | 0.9603 | 0.1959 | 0.5694 |
 | Bet365 pre-match, margin removed | 0.9480 | 0.1923 | 0.5623 |
 | Pinnacle closing, margin removed | 0.9429 | 0.1907 | 0.5582 |
 
-The models are well calibrated: when Dixon-Coles gives an outcome a 25% chance, it happens about 26% of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses. Adding shots narrows it a little, as the shots-adjusted model shows on seasons it was never tuned on, but not by enough.
+The models are well calibrated: when the main model gives an outcome a 25% chance, it happens about a quarter of the time. But the market's forecasts are sharper. A model built only from past scores knows nothing about injuries, suspensions, managerial changes or team news, all of which the market prices in. That gap is the most likely reason the model loses. Adding shots narrows it only slightly: on seasons it was never tuned on, the main model beats Dixon-Coles on ranked probability and Brier scores and ties it on log loss. Its tuned settings did a little worse here than the even blend first tried (a ranked probability score of 0.1962 against 0.1959). That is a normal cost of tuning on limited data, and the tuned settings are kept, since switching after seeing these results would mean tuning on the test seasons.
 
 ### Bets by the model's chance of winning
 
-The bets each model was surest about win most often, but at short odds. For Dixon-Coles:
+The bets each model was surest about win most often, but at short odds. For the main model:
 
 | Model's chance | Bets | Average chance | Won | Level-stakes ROI |
 | --- | --- | --- | --- | --- |
-| Under 30% | 330 | 21.8% | 17.6% | -11.7% |
-| 30% to 45% | 351 | 37.8% | 29.9% | -6.8% |
-| 45% to 60% | 457 | 52.6% | 44.4% | -5.0% |
-| Over 60% | 275 | 67.4% | 53.1% | -11.5% |
+| Under 30% | 407 | 21.0% | 14.7% | -16.4% |
+| 30% to 45% | 399 | 37.5% | 33.1% | +3.4% |
+| 45% to 60% | 415 | 52.2% | 43.6% | -7.0% |
+| Over 60% | 148 | 66.9% | 54.1% | -10.3% |
 
-In every band the bets won less often than the model expected, and the bets it was most confident about did no better than the rest. That is a selection effect: value bets are chosen where the model disagrees with the market, and on exactly those matches the model is overconfident. The shots-adjusted model's 30% to 45% band happened to make money, but picking out one profitable band after the event is how backtests mislead, so it is not treated as a finding.
+In every band the bets won less often than the model expected, and the bets it was most confident about did no better than the rest. That is a selection effect: value bets are chosen where the model disagrees with the market, and on exactly those matches the model is overconfident. The 30% to 45% band happened to make money, but picking out one profitable band after the event is how backtests mislead, so it is not treated as a finding.
 
 ## Limitations
 
