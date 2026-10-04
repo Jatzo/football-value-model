@@ -203,3 +203,23 @@ def test_backtest_without_saving(
     assert cli.main(["backtest", "--seasons", "2324", "--no-save"]) == 0
     assert "Saved as run" not in capsys.readouterr().out
     assert not (simulated_cache_with_odds / "valuemodel.sqlite").exists()
+
+
+def test_fixtures_downloads_the_file_and_refreshes_this_season(
+    fake_site: FakeSource, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "current_season", lambda: "2526")
+    assert cli.main(["fixtures"]) == 0
+    out = capsys.readouterr().out
+    assert "Fixtures file has 12 matches" in out
+    assert "E0 2025/26: 20 results, latest 2026-01-17" in out
+    assert fake_site.requests[0].endswith("/fixtures.csv")
+    assert fake_site.requests[1].endswith("/2526/E0.csv")
+
+
+def test_fixtures_reports_a_failed_download(
+    fake_site: FakeSource, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "current_season", lambda: "9900")
+    assert cli.main(["fixtures"]) == 1
+    assert "Could not download" in capsys.readouterr().err

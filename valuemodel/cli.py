@@ -18,7 +18,9 @@ from valuemodel.config import (
     MIN_TEAM_MATCHES,
     TUNING_SEASONS,
     Settings,
+    current_season,
     load_settings,
+    season_label,
     validate_league,
     validate_season,
 )
@@ -30,6 +32,7 @@ from valuemodel.data import (
     load_season,
     make_client,
 )
+from valuemodel.fixtures import download_fixtures, load_fixtures
 from valuemodel.markets import MarketProbabilities, predict
 from valuemodel.models.common import FittedModel, UnknownTeamError
 from valuemodel.models.dixon_coles import fit_dixon_coles
@@ -131,6 +134,19 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=list(XI_GRID),
         help="decay rates per day to try (default: %(default)s)",
+    )
+
+    fixtures = commands.add_parser(
+        "fixtures",
+        help="download upcoming fixtures and refresh this season's results for the dashboard",
+    )
+    fixtures.add_argument(
+        "--leagues",
+        nargs="+",
+        default=list(DEFAULT_LEAGUES),
+        type=_argument(validate_league),
+        metavar="CODE",
+        help="leagues whose current season results to refresh (default: %(default)s)",
     )
 
     backtest = commands.add_parser(
@@ -306,6 +322,28 @@ def run_predict(
     return 0
 
 
+def run_fixtures(leagues: Sequence[str]) -> int:
+    settings = load_settings()
+    season = current_season()
+    try:
+        with make_client() as client:
+            path = download_fixtures(client, settings)
+            download_seasons(client, leagues, [season], settings, force=True)
+    except DownloadError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    fixtures = load_fixtures(path)
+    counts = fixtures["league"].value_counts(sort=False)
+    listed = ", ".join(f"{league} {count}" for league, count in counts.items()) or "none"
+    print(f"Fixtures file has {len(fixtures)} matches by league: {listed}")
+    for league in leagues:
+        played = load_season(cache_path(settings.raw_dir, league, season), league, season)
+        latest = played["date"].max().date() if len(played) else "no matches yet"
+        print(f"{league} {season_label(season)}: {len(played)} results, latest {latest}")
+    return 0
+
+
 def run_backtest_command(league: str, seasons: Sequence[str], save: bool) -> int:
     settings = load_settings()
     needed = list(dict.fromkeys([*DEFAULT_SEASONS, *seasons]))
@@ -341,6 +379,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_download(args.leagues, args.seasons, args.refresh)
         if args.command == "tune-xi":
             return run_tune_xi(args.league, args.model, args.xi)
+        if args.command == "fixtures":
+            return run_fixtures(args.leagues)
         if args.command == "backtest":
             return run_backtest_command(args.league, args.seasons, not args.no_save)
         if args.command == "predict":

@@ -19,6 +19,8 @@ class FakeSource:
         self.requests.append(str(request.url))
         if self.body is not None:
             return httpx.Response(200, content=self.body)
+        if request.url.path == "/fixtures.csv":
+            return httpx.Response(200, content=(self.fixtures_dir / "upcoming.csv").read_bytes())
         season, league = request.url.path.split("/")[-2:]
         fixture = self.fixtures_dir / f"{league.removesuffix('.csv')}_{season}.csv"
         if not fixture.exists():
