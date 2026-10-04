@@ -5,7 +5,7 @@
 
   const style = getComputedStyle(document.documentElement);
   const colour = (name) => style.getPropertyValue(name).trim();
-  const palette = [colour("--accent"), "#d97706", "#7c3aed"];
+  const palette = [colour("--accent"), "#d97706", "#7c3aed", "#0d9488"];
 
   Chart.defaults.font.family = colour("--font") || "system-ui, sans-serif";
   Chart.defaults.color = colour("--muted");
