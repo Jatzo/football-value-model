@@ -131,6 +131,10 @@ flask --app valuemodel.web run
 
 Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page starts with the same ranked paper bets, each with a box to type a stake and see what it would return. It then prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. A bet calculator takes any upcoming game, outcome, odds and stake, and shows the return, the profit, the edge against the model and whether it counts as value. Below that, a season schedule section gives the model's chances, fair odds, prices to beat and expected goals for the next few rounds of the Premier League and Championship, or every remaining round. It has no odds, so it is the model's view of what might happen rather than a list of bets, and games further ahead use today's team ratings. The bets page can also be ordered by the model's chance of each bet winning.
 
+![Fixtures page with the bet calculator and the season schedule](docs/screenshot-fixtures.png)
+
+The calculator above shows an example entry, odds of 1.90 and a stake of 10, on a real upcoming game.
+
 The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
 
 ### Development
