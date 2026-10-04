@@ -34,6 +34,11 @@ DEFAULT_SEASONS: tuple[str, ...] = HISTORY_SEASONS + TUNING_SEASONS + BACKTEST_S
 # README records the full table.
 DEFAULT_XI = 0.003
 
+# Share of each score taken from shot-based expected goals in the shots-adjusted
+# model, the rest from actual goals. Chosen with `valuemodel tune-shots` on the
+# same tuning seasons as xi. The README records the full table.
+SHOT_WEIGHT = 0.5
+
 # Matches older than this are left out of a fit. Time decay already gives them
 # little weight, and dropping them keeps each refit fast.
 TRAINING_WINDOW_DAYS = 1095
