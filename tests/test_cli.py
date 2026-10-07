@@ -410,17 +410,17 @@ def test_slips_pass_the_chosen_size_on(
 ) -> None:
     seen = []
 
-    def fixtures_view(_: object, legs: int) -> views.FixturesView:
-        seen.append(legs)
+    def fixtures_view(_: object, legs: int, bet_type: str) -> views.FixturesView:
+        seen.append((legs, bet_type))
         return views.FixturesView(status="ok", picks=[{"outcome": "home"}])
 
     clean_environment.setattr(cli.views, "fixtures_view", fixtures_view)
     no_schedule(clean_environment)
     clean_environment.setattr(
-        cli.views, "likely_slip_cards", lambda *args: seen.append(args[-1]) or []
+        cli.views, "likely_slip_cards", lambda *args: seen.append(args[2:]) or []
     )
-    assert cli.main(["slips", "--legs", "5"]) == 0
-    assert seen == [5, 5]
+    assert cli.main(["slips", "--legs", "5", "--bet", "goals"]) == 0
+    assert seen == [(5, "goals"), (5, "goals")]
     assert (
         "No value five-fold: too few matches have a value bet for 5 legs."
         in capsys.readouterr().out
@@ -431,3 +431,14 @@ def test_slips_reject_too_many_legs(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
         cli.main(["slips", "--legs", "7"])
     assert "invalid choice" in capsys.readouterr().err
+
+
+def test_slips_explain_there_are_no_odds_for_both_teams_to_score(
+    clean_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clean_environment.setattr(
+        cli.views, "fixtures_view", lambda *_: views.FixturesView(status="ok", picks=[{}])
+    )
+    no_schedule(clean_environment)
+    assert cli.main(["slips", "--bet", "btts"]) == 0
+    assert "has no Bet365 odds for both teams to score" in capsys.readouterr().out

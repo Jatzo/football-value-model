@@ -48,7 +48,7 @@ from valuemodel.labels import MARKET_LABELS, OUTCOME_LABELS, STRATEGY_LABELS, la
 from valuemodel.markets import predict
 from valuemodel.models.common import UnknownTeamError
 from valuemodel.odds import MARKETS, check_quotes
-from valuemodel.picks import DEFAULT_LEGS, MAX_LEGS, SIZE_NAMES
+from valuemodel.picks import BET_TYPES, DEFAULT_BET_TYPE, DEFAULT_LEGS, MAX_LEGS, SIZE_NAMES
 from valuemodel.report import format_report, staking_description, table
 from valuemodel.schedule import SCHEDULE_FILES, download_schedule, load_schedule, upcoming_games
 from valuemodel.staking import stake
@@ -175,6 +175,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_LEGS,
         metavar="N",
         help=f"legs per slip, 1 to {MAX_LEGS} (default: %(default)s)",
+    )
+    slips.add_argument(
+        "--bet",
+        choices=list(BET_TYPES),
+        default=DEFAULT_BET_TYPE,
+        help="any, result (who wins), goals (over/under 2.5) or btts (default: %(default)s)",
     )
 
     shots = commands.add_parser(
@@ -445,11 +451,13 @@ def run_picks(today: date | None = None) -> int:
     return 0
 
 
-def run_slips(today: date | None = None, legs: int = DEFAULT_LEGS) -> int:
+def run_slips(
+    today: date | None = None, legs: int = DEFAULT_LEGS, bet_type: str = DEFAULT_BET_TYPE
+) -> int:
     settings = load_settings()
     today = today or date.today()
     bookmaker = BOOKMAKERS[settings.bookmaker]
-    fixtures = views.fixtures_view(settings, legs)
+    fixtures = views.fixtures_view(settings, legs, bet_type)
     if fixtures.status == "missing":
         raise FileNotFoundError("No fixtures downloaded yet. Run: valuemodel fixtures")
     if fixtures.slips:
@@ -470,6 +478,10 @@ def run_slips(today: date | None = None, legs: int = DEFAULT_LEGS) -> int:
             f"Stakes are {staking_description(settings)} on a "
             f"{settings.starting_bankroll:g} unit bankroll.\n"
         )
+    elif bet_type == "btts":
+        print(
+            f"No value slips: the fixtures file has no {bookmaker} odds for both teams to score.\n"
+        )
     elif fixtures.picks:
         size = SIZE_NAMES[legs].lower()
         print(f"No value {size}: too few matches have a value bet for {legs} legs.\n")
@@ -477,7 +489,7 @@ def run_slips(today: date | None = None, legs: int = DEFAULT_LEGS) -> int:
         print(f"No value slips: no listed game has a value bet at {bookmaker}'s current odds.\n")
 
     schedule = views.schedule_view(settings, rounds=1, today=today)
-    likely = views.likely_slip_cards(schedule, settings.edge_threshold, legs)
+    likely = views.likely_slip_cards(schedule, settings.edge_threshold, legs, bet_type)
     if likely:
         print("Likeliest slips for the next round, which need no odds\n")
     for slip in likely:
@@ -577,7 +589,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "tune-xi": lambda: run_tune_xi(args.league, args.model, args.xi, not args.single_league),
         "fixtures": lambda: run_fixtures(args.leagues),
         "picks": lambda: run_picks(),
-        "slips": lambda: run_slips(legs=args.legs),
+        "slips": lambda: run_slips(legs=args.legs, bet_type=args.bet),
         "tune-shots": lambda: run_tune_shots(args.league, args.weights, not args.single_league),
         "backtest": lambda: run_backtest_command(
             args.league, args.seasons, not args.no_save, not args.single_league
