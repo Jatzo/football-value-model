@@ -27,9 +27,9 @@ from valuemodel.config import (
 from valuemodel.data import load_available
 from valuemodel.fixtures import fetched_at, fixtures_path, load_fixtures, price_fixtures
 from valuemodel.labels import (
+    BET_LABELS,
     MARKET_LABELS,
     NO_COMMON_MATCHES,
-    OUTCOME_LABELS,
     STRATEGY_LABELS,
     is_missing,
     label,
@@ -37,8 +37,11 @@ from valuemodel.labels import (
     share,
     tone,
 )
+from valuemodel.markets import BOTH_TEAMS_TO_SCORE
 from valuemodel.odds import MARKETS
 from valuemodel.picks import (
+    BET_TYPES,
+    DEFAULT_BET_TYPE,
     DEFAULT_LEGS,
     MAX_LEGS,
     Selection,
@@ -299,6 +302,7 @@ class FixtureRow:
     away_team: str
     reliable: bool
     cells: list[PriceCell]
+    both_teams: float | None = None
 
 
 def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
@@ -328,9 +332,33 @@ def fixture_rows(priced: pd.DataFrame, league: str) -> list[FixtureRow]:
                 away_team=fixture["away_team"],
                 reliable=bool(fixture["reliable"]),
                 cells=cells,
+                both_teams=_both_teams(fixture),
             )
         )
     return rows
+
+
+def _both_teams(game: dict[str, object]) -> float | None:
+    """The chance both sides score, when the game was priced reliably."""
+    chance = game.get("btts_yes")
+    return None if not game["reliable"] or is_missing(chance) else float(chance)
+
+
+def _both_teams_chances(yes: float | None) -> list[float]:
+    """Both teams to score, yes then no, or nothing when it was not priced."""
+    return [] if yes is None else [yes, 1 - yes]
+
+
+def _both_teams_cell(game: dict[str, object], edge_threshold: float) -> "ChanceCell | None":
+    chance = _both_teams(game)
+    if chance is None:
+        return None
+    return ChanceCell(
+        chance=chance,
+        fair_odds=1 / chance,
+        price_to_beat=price_to_beat(chance, edge_threshold),
+        likely=False,
+    )
 
 
 @dataclass
@@ -396,7 +424,9 @@ class FixturesView:
     slips: list[dict[str, object]] = field(default_factory=list)
 
 
-def fixtures_view(settings: Settings, legs: int = DEFAULT_LEGS) -> FixturesView:
+def fixtures_view(
+    settings: Settings, legs: int = DEFAULT_LEGS, bet_type: str = DEFAULT_BET_TYPE
+) -> FixturesView:
     path = fixtures_path(settings)
     if not path.exists():
         return FixturesView(status="missing")
@@ -437,7 +467,7 @@ def fixtures_view(settings: Settings, legs: int = DEFAULT_LEGS) -> FixturesView:
             {**pick, "key": match_key(pick["date"], pick["home_team"], pick["away_team"])}
             for pick in picks.to_dict("records")
         ],
-        slips=slip_cards(picks, settings, legs),
+        slips=slip_cards(picks, settings, legs, bet_type),
     )
 
 
@@ -447,7 +477,10 @@ def match_label(day: pd.Timestamp, kickoff: object, home: str, away: str) -> str
 
 
 def slip_cards(
-    picks: pd.DataFrame, settings: Settings, legs: int = DEFAULT_LEGS
+    picks: pd.DataFrame,
+    settings: Settings,
+    legs: int = DEFAULT_LEGS,
+    bet_type: str = DEFAULT_BET_TYPE,
 ) -> list[dict[str, object]]:
     """The best few value slips of the chosen size, each ready to load into the bet slip."""
     by_leg = {
@@ -455,7 +488,7 @@ def slip_cards(
         for pick in picks.to_dict("records")
     }
     cards = []
-    for slip in best_slips(picks, settings, legs):
+    for slip in best_slips(picks, settings, legs, bet_type=bet_type):
         legs = []
         for leg in slip.accumulator.legs:
             pick = by_leg[(leg.match, leg.outcome)]
@@ -464,7 +497,7 @@ def slip_cards(
                 {
                     "key": leg.match,
                     "match": match,
-                    "bet": OUTCOME_LABELS[leg.outcome],
+                    "bet": BET_LABELS[leg.outcome],
                     "odds": leg.odds,
                     "chance": leg.probability,
                 }
@@ -501,6 +534,11 @@ def parse_legs(value: str | None) -> int:
 LEG_CHOICES: tuple[int, ...] = tuple(range(1, MAX_LEGS + 1))
 
 
+def parse_bet_type(value: str | None) -> str:
+    """Which bet type the suggested slips should use, falling back to any bet."""
+    return value if value in BET_TYPES else DEFAULT_BET_TYPE
+
+
 def parse_rounds(value: str | None) -> int:
     """How many rounds of the schedule to show, falling back to the default."""
     try:
@@ -529,6 +567,7 @@ class ScheduleRow:
     cells: list[ChanceCell]
     home_goals: float
     away_goals: float
+    both_teams: ChanceCell | None = None
 
 
 def schedule_rows(priced: pd.DataFrame, edge_threshold: float) -> list[ScheduleRow]:
@@ -559,6 +598,7 @@ def schedule_rows(priced: pd.DataFrame, edge_threshold: float) -> list[ScheduleR
                 cells=cells,
                 home_goals=game["home_goals"],
                 away_goals=game["away_goals"],
+                both_teams=_both_teams_cell(game, edge_threshold),
             )
         )
     return rows
@@ -618,8 +658,10 @@ def _calculator_game(
         "league": label(LEAGUES, league),
         "match": match_label(day, kickoff, home, away),
         "outcomes": [
-            {"name": OUTCOME_LABELS[outcome], "chance": chance, "odds": price}
-            for outcome, chance, price in zip(OUTCOME_ORDER, chances, odds, strict=True)
+            {"name": BET_LABELS[outcome], "chance": chance, "odds": price}
+            for outcome, chance, price in zip(
+                (*OUTCOME_ORDER, *BOTH_TEAMS_TO_SCORE)[: len(chances)], chances, odds, strict=True
+            )
         ],
     }
 
@@ -642,14 +684,17 @@ def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dic
                     row.kickoff,
                     row.home_team,
                     row.away_team,
-                    [1 / cell.fair_odds for cell in row.cells],
-                    [None if is_missing(cell.offered) else cell.offered for cell in row.cells],
+                    [1 / cell.fair_odds for cell in row.cells]
+                    + _both_teams_chances(row.both_teams),
+                    [None if is_missing(cell.offered) else cell.offered for cell in row.cells]
+                    + [None] * len(_both_teams_chances(row.both_teams)),
                 )
             )
     for league, rows in schedule.rows.items():
         for row in rows:
             if not row.reliable or (row.date.date(), row.home_team, row.away_team) in seen:
                 continue
+            both_teams = _both_teams_chances(row.both_teams.chance if row.both_teams else None)
             games.append(
                 _calculator_game(
                     league,
@@ -657,15 +702,18 @@ def calculator_games(fixtures: FixturesView, schedule: ScheduleView) -> list[dic
                     row.kickoff,
                     row.home_team,
                     row.away_team,
-                    [cell.chance for cell in row.cells],
-                    [None] * len(row.cells),
+                    [cell.chance for cell in row.cells] + both_teams,
+                    [None] * (len(row.cells) + len(both_teams)),
                 )
             )
     return games
 
 
 def likely_slip_cards(
-    schedule: ScheduleView, edge_threshold: float, legs: int = DEFAULT_LEGS
+    schedule: ScheduleView,
+    edge_threshold: float,
+    legs: int = DEFAULT_LEGS,
+    bet_type: str = DEFAULT_BET_TYPE,
 ) -> list[dict[str, object]]:
     """The likeliest few slips of the chosen size from each league's next round in the schedule.
 
@@ -684,13 +732,20 @@ def likely_slip_cards(
                 Selection(key, outcome, cell.chance)
                 for outcome, cell in zip(OUTCOME_ORDER, row.cells, strict=True)
             ]
+            both_teams = _both_teams_chances(row.both_teams.chance if row.both_teams else None)
+            selections += [
+                Selection(key, outcome, chance)
+                for outcome, chance in zip(
+                    BOTH_TEAMS_TO_SCORE[: len(both_teams)], both_teams, strict=True
+                )
+            ]
     cards = []
-    for slip in likely_slips(selections, legs):
+    for slip in likely_slips(selections, legs, bet_type=bet_type):
         legs = [
             {
                 "key": selection.match,
                 "match": labels[selection.match],
-                "bet": OUTCOME_LABELS[selection.outcome],
+                "bet": BET_LABELS[selection.outcome],
                 "odds": None,
                 "chance": selection.probability,
                 "price_to_beat": price_to_beat(selection.probability, edge_threshold),

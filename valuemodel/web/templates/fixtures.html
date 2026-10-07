@@ -149,10 +149,17 @@
         {% endfor %}
       </select>
     </label>
+    <label>Bet type
+      <select name="bet" onchange="this.form.submit()">
+        {% for value, name in bet_types.items() %}
+        <option value="{{ value }}" {% if value == bet_type %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <noscript><button type="submit">Show</button></noscript>
   </form>
   <p class="muted small">
-    The top three options for a {{ size_names[legs] | lower }}, one leg per match. The options often share legs: the second and third usually swap one leg for the next best choice.
+    The top three options for a {{ size_names[legs] | lower }}{% if bet_type != 'any' %} using only {{ bet_types[bet_type] | lower }} bets{% endif %}, one leg per match. The options often share legs: the second and third usually swap one leg for the next best choice.
     You can add as many legs as you like to the bet slip by hand.
   </p>
   {% if view.slips %}
@@ -182,6 +189,8 @@
     </article>
     {% endfor %}
   </div>
+  {% elif bet_type == 'btts' %}
+  <p class="muted">The fixtures file has no {{ bookmaker }} odds for both teams to score, so there are no value slips for this bet type. The likeliest slips below still work: load one and type the odds from the {{ bookmaker }} site.</p>
   {% elif view.picks %}
   <p class="muted">Too few matches have a value bet to build a value {{ size_names[legs] | lower }}. Choose fewer legs to see value slips.</p>
   {% elif view.status == "ok" %}
@@ -287,6 +296,7 @@
 <form class="filters panel" method="get" action="#schedule">
   {% if run_id %}<input type="hidden" name="run" value="{{ run_id }}">{% endif %}
   <input type="hidden" name="legs" value="{{ legs }}">
+  <input type="hidden" name="bet" value="{{ bet_type }}">
   <label>Show
     <select name="rounds">
       {% for choice in round_choices %}
@@ -307,13 +317,14 @@
         <th>Kick-off</th><th>Match</th>
         <th class="num">Home</th><th class="num">Draw</th><th class="num">Away</th>
         <th class="num">Over 2.5</th><th class="num">Under 2.5</th>
+        <th class="num">Both score</th>
         <th class="num">Expected goals</th>
       </tr>
     </thead>
     <tbody>
       {% for game in games %}
       {% if loop.changed(game.round) %}
-      <tr class="round-heading"><th colspan="8">{{ game.round }}</th></tr>
+      <tr class="round-heading"><th colspan="9">{{ game.round }}</th></tr>
       {% endif %}
       <tr>
         <td>{{ game.date.strftime('%a %d %b') }} {{ game.kickoff }}</td>
@@ -325,8 +336,15 @@
           <span class="edge" title="Lowest {{ bookmaker }} odds that would be a value bet">value from {{ cell.price_to_beat | odds }}</span>
         </td>
         {% else %}
-        <td class="muted small" colspan="5">Not priced: a team has fewer than {{ min_matches }} matches in the training window</td>
+        <td class="muted small" colspan="6">Not priced: a team has fewer than {{ min_matches }} matches in the training window</td>
         {% endfor %}
+        {% if game.both_teams %}
+        <td class="num price">
+          <span class="fair" title="Model chance both teams score">{{ game.both_teams.chance | percent }}</span>
+          <span class="offered" title="Model fair odds">{{ game.both_teams.fair_odds | odds }}</span>
+          <span class="edge" title="Lowest {{ bookmaker }} odds that would be a value bet">value from {{ game.both_teams.price_to_beat | odds }}</span>
+        </td>
+        {% endif %}
         <td class="num">{% if game.reliable %}{{ "%.2f" | format(game.home_goals) }} v {{ "%.2f" | format(game.away_goals) }}{% endif %}</td>
       </tr>
       {% endfor %}
@@ -336,6 +354,7 @@
   <p class="muted small">
     Each cell shows the model's chance, the fair odds that chance implies, and the lowest {{ bookmaker }} odds that would make it a value bet
     (an edge of at least {{ settings.edge_threshold | share }}). Underlined cells are each match's most likely result.
+    Both score is the chance that each team scores at least once; the fixtures file has no odds for it, so it is never part of the backtest.
     Every game uses the team ratings as of the latest result in the data, so games further ahead are rougher guides:
     results between now and then will move the ratings.
   </p>

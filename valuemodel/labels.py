@@ -12,6 +12,13 @@ OUTCOME_LABELS: dict[str, str] = {
 
 MARKET_LABELS: dict[str, str] = {"1x2": "Match result", "totals": "Over/under 2.5"}
 
+# Every bet the slips can hold: the backtested outcomes plus both teams to score.
+BET_LABELS: dict[str, str] = {
+    **OUTCOME_LABELS,
+    "btts_yes": "Both teams score: yes",
+    "btts_no": "Both teams score: no",
+}
+
 STRATEGY_LABELS: dict[str, str] = {
     "dixon-coles": "Dixon-Coles",
     "poisson": "Poisson",

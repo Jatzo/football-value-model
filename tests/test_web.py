@@ -559,9 +559,10 @@ def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> No
     assert leg["match"] == "Thu 08 Oct 15:00, Arsenal v Leeds"
     assert leg["odds"] is None
     arsenal = schedule.rows["E0"][0]
-    likeliest = max(arsenal.cells, key=lambda cell: cell.chance)
-    assert leg["chance"] == likeliest.chance
-    assert cards[0]["price_to_beat"] == pytest.approx(1.03 / likeliest.chance)
+    yes = arsenal.both_teams.chance
+    likeliest = max([cell.chance for cell in arsenal.cells] + [yes, 1 - yes])
+    assert leg["chance"] == pytest.approx(likeliest)
+    assert cards[0]["price_to_beat"] == pytest.approx(1.03 / likeliest)
     assert views.likely_slip_cards(views.ScheduleView(rounds=1), 0.03) == []
 
 
@@ -570,3 +571,47 @@ def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> No
 )
 def test_parse_legs(value: str | None, expected: int) -> None:
     assert views.parse_legs(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [(None, "any"), ("result", "result"), ("btts", "btts"), ("x", "any")]
+)
+def test_parse_bet_type(value: str | None, expected: str) -> None:
+    assert views.parse_bet_type(value) == expected
+
+
+def test_schedule_and_slips_include_both_teams_to_score(settings: Settings) -> None:
+    today = date(2026, 10, 4)
+    write_schedule(settings, today)
+    schedule = views.schedule_view(settings, rounds=3, today=today)
+    arsenal = schedule.rows["E0"][0]
+    assert arsenal.both_teams is not None
+    yes = arsenal.both_teams.chance
+    assert 0 < yes < 1
+    assert arsenal.both_teams.price_to_beat == pytest.approx(1.03 / yes)
+
+    game = views.calculator_games(views.FixturesView(status="ok"), schedule)[0]
+    names = [outcome["name"] for outcome in game["outcomes"]]
+    assert names[-2:] == ["Both teams score: yes", "Both teams score: no"]
+    assert game["outcomes"][-1]["chance"] == pytest.approx(1 - yes)
+
+    results = views.likely_slip_cards(schedule, 0.03, legs=1, bet_type="result")
+    assert {card["legs"][0]["bet"] for card in results} <= {"Home win", "Draw", "Away win"}
+    both = views.likely_slip_cards(schedule, 0.03, legs=1, bet_type="btts")
+    assert [card["legs"][0]["bet"] for card in both][:2] == sorted(
+        ["Both teams score: yes", "Both teams score: no"],
+        key=lambda bet: yes if bet.endswith("yes") else 1 - yes,
+        reverse=True,
+    )
+
+
+def test_fixtures_page_offers_bet_types(empty_client: FlaskClient, settings: Settings) -> None:
+    write_schedule(settings, date.today())
+    html = empty_client.get("/fixtures?rounds=1&legs=1&bet=result").get_data(as_text=True)
+    suggested = html.split('id="suggested"')[1].split("</section>")[0]
+    assert '<option value="result" selected>Match result</option>' in suggested
+    assert "using only match result bets" in suggested
+    assert "Both score" in html
+    assert '<input type="hidden" name="bet" value="result">' in html
+    btts = empty_client.get("/fixtures?legs=1&bet=btts").get_data(as_text=True)
+    assert "no Bet365 odds for both teams to score" in btts
