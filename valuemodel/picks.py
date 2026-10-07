@@ -145,6 +145,21 @@ SIZE_NAMES: dict[int, str] = {
 }
 
 
+BET_TYPES: dict[str, tuple[str, ...]] = {
+    "any": ("home", "draw", "away", "over25", "under25", "btts_yes", "btts_no"),
+    "result": ("home", "draw", "away"),
+    "goals": ("over25", "under25"),
+    "btts": ("btts_yes", "btts_no"),
+}
+BET_TYPE_LABELS: dict[str, str] = {
+    "any": "Any bet",
+    "result": "Match result",
+    "goals": "Over/under 2.5 goals",
+    "btts": "Both teams to score",
+}
+DEFAULT_BET_TYPE = "any"
+
+
 def match_key(day: pd.Timestamp, home: str, away: str) -> str:
     """Identifies a match, so a slip never holds two legs from the same one."""
     return f"{day:%Y-%m-%d} {home} v {away}"
@@ -200,6 +215,7 @@ def best_slips(
     settings: Settings,
     legs: int = DEFAULT_LEGS,
     options: int = SLIP_OPTIONS,
+    bet_type: str = DEFAULT_BET_TYPE,
 ) -> list[SuggestedSlip]:
     """The best few slips of a given size that can be built from the value picks.
 
@@ -216,6 +232,7 @@ def best_slips(
             probability=float(pick["probability"]),
         )
         for pick in picks.to_dict("records")
+        if pick["outcome"] in BET_TYPES[bet_type]
     ]
     slips = []
     for option, combination in enumerate(
@@ -255,7 +272,10 @@ class LikelySlip:
 
 
 def likely_slips(
-    selections: Sequence[Selection], legs: int = DEFAULT_LEGS, options: int = SLIP_OPTIONS
+    selections: Sequence[Selection],
+    legs: int = DEFAULT_LEGS,
+    options: int = SLIP_OPTIONS,
+    bet_type: str = DEFAULT_BET_TYPE,
 ) -> list[LikelySlip]:
     """The few slips of a given size the model thinks most likely to win, one leg per match.
 
@@ -266,7 +286,12 @@ def likely_slips(
     return [
         LikelySlip(slip_name(legs, option), combination)
         for option, combination in enumerate(
-            top_combinations(selections, legs, lambda selection: selection.probability, options),
+            top_combinations(
+                [s for s in selections if s.outcome in BET_TYPES[bet_type]],
+                legs,
+                lambda selection: selection.probability,
+                options,
+            ),
             1,
         )
     ]

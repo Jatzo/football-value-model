@@ -9,6 +9,8 @@ from simulation import add_odds, simulate_league, true_model
 from valuemodel.config import Settings
 from valuemodel.fixtures import price_fixtures
 from valuemodel.picks import (
+    BET_TYPE_LABELS,
+    BET_TYPES,
     PICK_COLUMNS,
     Leg,
     Selection,
@@ -261,3 +263,27 @@ def test_top_combinations_match_trying_every_combination(seed: int, size: int) -
     scores = [math.prod(c.probability for c in combination) for combination in fast]
     expected = [math.prod(c.probability for c in combination) for combination in exhaustive[:3]]
     assert scores == pytest.approx(expected)
+
+
+def test_likely_slips_keep_to_one_bet_type() -> None:
+    selections = [*SELECTIONS, Selection("2026-10-10 Arsenal v Leeds", "btts_no", 0.66)]
+    results = likely_slips(selections, legs=2, bet_type="result")
+    assert all(s.outcome in BET_TYPES["result"] for slip in results for s in slip.selections)
+    assert [s.outcome for s in results[0].selections] == ["home", "home"]
+    both = likely_slips(selections, legs=1, bet_type="btts")
+    assert [slip.selections[0].outcome for slip in both] == ["btts_no"]
+    anything = likely_slips(selections, legs=1)
+    assert anything[0].selections[0].outcome == "btts_no"
+
+
+def test_best_slips_keep_to_one_bet_type() -> None:
+    goals = best_slips(PICKS, Settings(), legs=1, bet_type="goals")
+    assert [slip.accumulator.legs[0].outcome for slip in goals] == ["over25"]
+    assert best_slips(PICKS, Settings(), legs=1, bet_type="btts") == []
+
+
+def test_every_bet_type_has_a_label() -> None:
+    assert set(BET_TYPE_LABELS) == set(BET_TYPES)
+    assert set(BET_TYPES["any"]) == set(
+        BET_TYPES["result"] + BET_TYPES["goals"] + BET_TYPES["btts"]
+    )
