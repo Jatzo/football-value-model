@@ -4,7 +4,15 @@ import pytest
 from scipy.stats import poisson
 from simulation import true_model
 
-from valuemodel.markets import OUTCOMES, market_probabilities, predict, price_matches
+from valuemodel.markets import (
+    BOTH_TEAMS_TO_SCORE,
+    OUTCOMES,
+    both_teams_to_score,
+    market_probabilities,
+    predict,
+    price_both_teams_to_score,
+    price_matches,
+)
 from valuemodel.models.common import FittedModel
 
 
@@ -53,3 +61,40 @@ def test_price_matches_leaves_unreliable_matches_unpriced() -> None:
     assert list(prices["reliable"]) == [True, False]
     assert prices.loc[7, ["home", "draw", "away"]].sum() == pytest.approx(1.0)
     assert prices.loc[9, list(OUTCOMES)].isna().all()
+
+
+def test_both_teams_to_score_from_a_small_matrix() -> None:
+    matrix = np.array(
+        [
+            [0.10, 0.08, 0.02],
+            [0.15, 0.12, 0.03],
+            [0.20, 0.18, 0.12],
+        ]
+    )
+    assert both_teams_to_score(matrix) == pytest.approx(0.12 + 0.03 + 0.18 + 0.12)
+
+
+def test_both_teams_to_score_matches_independent_poisson_goals() -> None:
+    home_rate, away_rate = 1.6, 1.1
+    goals = np.arange(11)
+    matrix = np.outer(poisson.pmf(goals, home_rate), poisson.pmf(goals, away_rate))
+    expected = (1 - np.exp(-home_rate)) * (1 - np.exp(-away_rate))
+    assert both_teams_to_score(matrix) == pytest.approx(expected, abs=1e-6)
+
+
+def test_both_teams_to_score_for_each_match() -> None:
+    model = true_model(6, -0.1, np.random.default_rng(3))
+    model = FittedModel(**{**model.__dict__, "match_counts": {"Team 00": 12, "Team 01": 12}})
+    matches = pd.DataFrame(
+        {"home_team": ["Team 00", "Team 02"], "away_team": ["Team 01", "Team 00"]},
+        index=[10, 11],
+    )
+    priced = price_both_teams_to_score(model, matches, min_matches=10)
+    assert list(priced.columns) == list(BOTH_TEAMS_TO_SCORE)
+    assert list(priced.index) == [10, 11]
+    first = priced.loc[10]
+    assert first["btts_yes"] == pytest.approx(
+        both_teams_to_score(model.score_matrix("Team 00", "Team 01"))
+    )
+    assert first["btts_yes"] + first["btts_no"] == pytest.approx(1.0)
+    assert priced.loc[11].isna().all()

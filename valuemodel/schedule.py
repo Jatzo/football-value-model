@@ -15,7 +15,7 @@ import pandas as pd
 from valuemodel.backtest import MAIN_MODEL, MODELS
 from valuemodel.config import MIN_TEAM_MATCHES, Settings, season_start_year
 from valuemodel.data import DownloadError, save_file
-from valuemodel.markets import price_matches
+from valuemodel.markets import price_both_teams_to_score, price_matches
 from valuemodel.teams import schedule_team
 
 SCHEDULE_URL = "https://raw.githubusercontent.com/openfootball/football.json/master"
@@ -86,13 +86,15 @@ def upcoming_games(schedule: pd.DataFrame, today: date, rounds: int | None) -> p
 
 
 def predict_games(history: pd.DataFrame, games: pd.DataFrame, xi: float) -> pd.DataFrame:
-    """The main model's chances and expected goals for each game, fitted once on all results.
+    """The main model's chances, including both teams to score, and expected goals per game.
 
     Every game is priced from the same fit, so games further ahead use ratings
     that will have moved by the time they are played.
     """
     model = MODELS[MAIN_MODEL](history, games["date"].min(), xi)
-    priced = games.join(price_matches(model, games, MIN_TEAM_MATCHES))
+    priced = games.join(price_matches(model, games, MIN_TEAM_MATCHES)).join(
+        price_both_teams_to_score(model, games, MIN_TEAM_MATCHES)
+    )
     goals = [
         model.expected_goals(home, away) if reliable else (float("nan"), float("nan"))
         for home, away, reliable in zip(

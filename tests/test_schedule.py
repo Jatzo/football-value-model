@@ -138,8 +138,11 @@ def test_predictions_cover_every_outcome_and_skip_teams_with_little_history() ->
     assert known["home"] + known["draw"] + known["away"] == pytest.approx(1, abs=1e-6)
     assert known["over25"] + known["under25"] == pytest.approx(1, abs=1e-6)
     assert known["home_goals"] > 0 and known["away_goals"] > 0
+    assert known["btts_yes"] + known["btts_no"] == pytest.approx(1, abs=1e-9)
+    assert 0 < known["btts_yes"] < 1
 
     unknown = priced.iloc[1]
     assert not unknown["reliable"]
     assert np.isnan([unknown[o] for o in OUTCOMES]).all()
     assert np.isnan(unknown["home_goals"])
+    assert np.isnan(unknown["btts_yes"])

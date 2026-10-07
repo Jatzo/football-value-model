@@ -29,7 +29,7 @@ from valuemodel.data import (
     read_raw,
     standardise,
 )
-from valuemodel.markets import OUTCOMES, price_matches
+from valuemodel.markets import OUTCOMES, price_both_teams_to_score, price_matches
 from valuemodel.odds import MARKETS, find_value
 
 FIXTURES_URL = "https://football-data.co.uk/fixtures.csv"
@@ -96,8 +96,11 @@ def price_fixtures(
         except (ValueError, RuntimeError) as error:
             unpriced[league] = str(error)
             continue
+        priced_league = _with_odds(
+            upcoming, price_matches(model, upcoming, MIN_TEAM_MATCHES), settings
+        )
         frames.append(
-            _with_odds(upcoming, price_matches(model, upcoming, MIN_TEAM_MATCHES), settings)
+            priced_league.join(price_both_teams_to_score(model, upcoming, MIN_TEAM_MATCHES))
         )
         priced.append(league)
     result = pd.concat(frames) if frames else fixtures.iloc[0:0]

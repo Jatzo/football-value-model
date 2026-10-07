@@ -88,6 +88,7 @@ def test_price_fixtures(history_and_fixtures: tuple[pd.DataFrame, pd.DataFrame])
     reliable = priced[priced["reliable"]]
     np.testing.assert_allclose(reliable[["home", "draw", "away"]].sum(axis=1), 1.0)
     np.testing.assert_allclose(reliable["edge_home"], reliable["home"] * reliable["odds_home"] - 1)
+    np.testing.assert_allclose(reliable["btts_yes"] + reliable["btts_no"], 1.0)
     assert priced.iloc[0]["value_1x2"] == "home"
 
 

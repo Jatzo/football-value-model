@@ -50,3 +50,28 @@ def price_matches(model: FittedModel, matches: pd.DataFrame, min_matches: int) -
         prices = asdict(predict(model, home, away)) if reliable else {}
         rows.append({"reliable": reliable, **{o: prices.get(o, np.nan) for o in OUTCOMES}})
     return pd.DataFrame(rows, index=matches.index, columns=["reliable", *OUTCOMES])
+
+
+# Priced from the same scoreline matrix, but kept apart from OUTCOMES because the
+# data source has no odds for it, so it can never be backtested or value-checked.
+BOTH_TEAMS_TO_SCORE: tuple[str, ...] = ("btts_yes", "btts_no")
+
+
+def both_teams_to_score(matrix: np.ndarray) -> float:
+    """Chance that both sides score at least once."""
+    return float(matrix[1:, 1:].sum())
+
+
+def price_both_teams_to_score(
+    model: FittedModel, matches: pd.DataFrame, min_matches: int
+) -> pd.DataFrame:
+    """Both teams to score, yes and no, for each match, indexed like `matches`.
+
+    Matches the model cannot price reliably are left empty, as in price_matches.
+    """
+    rows = []
+    for home, away in zip(matches["home_team"], matches["away_team"], strict=True):
+        reliable = model.is_reliable(home, min_matches) and model.is_reliable(away, min_matches)
+        yes = both_teams_to_score(model.score_matrix(home, away)) if reliable else np.nan
+        rows.append({"btts_yes": yes, "btts_no": 1 - yes})
+    return pd.DataFrame(rows, index=matches.index, columns=list(BOTH_TEAMS_TO_SCORE))
