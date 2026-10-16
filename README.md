@@ -256,7 +256,7 @@ Then open http://127.0.0.1:5000. The summary page leads with closing line value 
 
 The screenshot shows the three likeliest trebles of any bet type for the round starting 9 October 2026, before the fixtures file listed any odds, with the first loaded into the bet slip and waiting for Bet365's prices.
 
-The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
+The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. It also fetches last season's results again once if the saved copy dates from before 1 July, so the final matchdays are not missed. Between 1 July and the new season's first results, the data source has no file for it yet, and the command says so rather than failing. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
 
 ### Configuration
 

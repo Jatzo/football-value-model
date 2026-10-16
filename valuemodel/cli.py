@@ -6,7 +6,7 @@ import sqlite3
 import sys
 import time
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import date, datetime
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
@@ -30,13 +30,17 @@ from valuemodel.config import (
     history_seasons,
     linked_leagues,
     load_settings,
+    season_code,
     season_label,
+    season_start_year,
     validate_league,
     validate_season,
 )
 from valuemodel.data import (
     DownloadError,
+    NotPublishedError,
     cache_path,
+    download_season,
     download_seasons,
     load_available,
     load_matches,
@@ -374,13 +378,31 @@ def run_predict(
 def run_fixtures(leagues: Sequence[str], today: date | None = None) -> int:
     settings = load_settings()
     today = today or date.today()
-    season = current_season()
+    season = current_season(today)
+    previous = season_code(season_start_year(season) - 1)
+    # A copy of last season saved before 1 July may stop short of its final
+    # matchday, and nothing else would ever fetch it again.
+    rollover = datetime(season_start_year(season), 7, 1).timestamp()
     scheduled = [league for league in leagues if league in SCHEDULE_FILES]
+    refreshed: list[tuple[str, str]] = []
     try:
         with make_client() as client:
             path = download_fixtures(client, settings)
-            time.sleep(settings.request_delay)
-            download_seasons(client, leagues, [season], settings, force=True)
+            for league in leagues:
+                stale = cache_path(settings.raw_dir, league, previous)
+                if stale.exists() and stale.stat().st_mtime < rollover:
+                    time.sleep(settings.request_delay)
+                    download_season(client, league, previous, settings.raw_dir, force=True)
+                    refreshed.append((league, previous))
+                time.sleep(settings.request_delay)
+                try:
+                    download_season(client, league, season, settings.raw_dir, force=True)
+                except NotPublishedError:
+                    # Without a cached copy the season has not started publishing
+                    # yet. With one, the file has gone missing, which is a failure.
+                    if cache_path(settings.raw_dir, league, season).exists():
+                        raise
+                refreshed.append((league, season))
             schedules = {}
             for league in scheduled:
                 time.sleep(settings.request_delay)
@@ -393,10 +415,14 @@ def run_fixtures(leagues: Sequence[str], today: date | None = None) -> int:
     counts = fixtures["league"].value_counts(sort=False)
     listed = ", ".join(f"{league} {count}" for league, count in counts.items()) or "none"
     print(f"Fixtures file has {len(fixtures)} matches by league: {listed}")
-    for league in leagues:
-        played = load_season(cache_path(settings.raw_dir, league, season), league, season)
+    for league, code in refreshed:
+        results = cache_path(settings.raw_dir, league, code)
+        if not results.exists():
+            print(f"{league} {season_label(code)}: no results published yet")
+            continue
+        played = load_season(results, league, code)
         latest = played["date"].max().date() if len(played) else "no matches yet"
-        print(f"{league} {season_label(season)}: {len(played)} results, latest {latest}")
+        print(f"{league} {season_label(code)}: {len(played)} results, latest {latest}")
     for league in leagues:
         print(_schedule_line(league, schedules.get(league), today))
     return 0

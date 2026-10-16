@@ -26,6 +26,15 @@ class DownloadError(RuntimeError):
     """Raised when the data source does not return a usable CSV file."""
 
 
+class NotPublishedError(DownloadError):
+    """Raised when the data source has no file at the address yet.
+
+    The source answers 404 for a season it has not started publishing, which
+    is expected between 1 July and the season's first results and is not a
+    failed download.
+    """
+
+
 OUTCOMES_1X2: dict[str, str] = {"H": "home", "D": "draw", "A": "away"}
 OUTCOMES_TOTALS: dict[str, str] = {">2.5": "over25", "<2.5": "under25"}
 
@@ -264,6 +273,9 @@ def download_csv(client: httpx.Client, url: str, path: Path) -> None:
     try:
         response = client.get(url)
         response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        failure = NotPublishedError if error.response.status_code == 404 else DownloadError
+        raise failure(f"Could not download {url}: {error}") from error
     except httpx.HTTPError as error:
         raise DownloadError(f"Could not download {url}: {error}") from error
 

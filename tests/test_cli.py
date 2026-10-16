@@ -1,4 +1,5 @@
-from datetime import date
+import os
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -7,6 +8,7 @@ from conftest import FakeSource
 from simulation import simulated_seasons
 
 from valuemodel import cli
+from valuemodel.data import cache_path
 from valuemodel.web import views
 
 
@@ -229,7 +231,7 @@ def test_backtest_without_saving(
 def test_fixtures_downloads_the_file_and_refreshes_this_season(
     fake_site: FakeSource, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(cli, "current_season", lambda: "2526")
+    monkeypatch.setattr(cli, "current_season", lambda *_: "2526")
     assert cli.run_fixtures(["E0"], today=date(2026, 10, 4)) == 0
     out = capsys.readouterr().out
     assert "Fixtures file has 12 matches" in out
@@ -238,6 +240,38 @@ def test_fixtures_downloads_the_file_and_refreshes_this_season(
     assert fake_site.requests[0].endswith("/fixtures.csv")
     assert fake_site.requests[1].endswith("/2526/E0.csv")
     assert fake_site.requests[2].endswith("/2025-26/en.1.json")
+
+
+def cache_season(data_dir: Path, season: str, written: date, content: bytes) -> None:
+    """Cache a Premier League season file as if it had been downloaded on the given day."""
+    path = cache_path(data_dir / "raw", "E0", season)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    moment = datetime(written.year, written.month, written.day, 12).timestamp()
+    os.utime(path, (moment, moment))
+
+
+@pytest.mark.parametrize("today", [date(2026, 7, 10), date(2026, 10, 4)])
+def test_fixtures_refreshes_last_season_fetched_before_it_ended(
+    fake_site: FakeSource, tmp_path: Path, capsys: pytest.CaptureFixture[str], today: date
+) -> None:
+    cache_season(tmp_path, "2526", written=date(2026, 5, 10), content=b"Div")
+    assert cli.run_fixtures(["E0"], today=today) == 0
+    out = capsys.readouterr().out
+    assert any(url.endswith("/2526/E0.csv") for url in fake_site.requests)
+    assert any(url.endswith("/2026-27/en.1.json") for url in fake_site.requests)
+    assert "E0 2025/26: 20 results, latest 2026-01-17" in out
+    assert "E0 2026/27: no results published yet" in out
+
+
+def test_fixtures_leaves_last_season_alone_once_fetched_after_it_ended(
+    fake_site: FakeSource, tmp_path: Path, fixtures_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    season_file = (fixtures_dir / "E0_2526.csv").read_bytes()
+    cache_season(tmp_path, "2526", written=date(2026, 7, 15), content=season_file)
+    assert cli.run_fixtures(["E0"], today=date(2026, 10, 4)) == 0
+    assert not any(url.endswith("/2526/E0.csv") for url in fake_site.requests)
+    assert "2025/26" not in capsys.readouterr().out
 
 
 def test_leagues_without_a_schedule_source_are_named() -> None:
@@ -253,9 +287,14 @@ def test_fixtures_refreshes_both_english_leagues_by_default() -> None:
 
 
 def test_fixtures_reports_a_failed_download(
-    fake_site: FakeSource, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    fake_site: FakeSource,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(cli, "current_season", lambda: "9900")
+    """A season that was downloaded before and now cannot be is a real failure."""
+    monkeypatch.setattr(cli, "current_season", lambda *_: "9900")
+    cache_season(tmp_path, "9900", written=date(2026, 10, 1), content=b"Div")
     assert cli.main(["fixtures"]) == 1
     assert "Could not download" in capsys.readouterr().err
 

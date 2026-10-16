@@ -1,11 +1,13 @@
 from pathlib import Path
 
+import httpx
 import pytest
 from conftest import FakeSource
 
 from valuemodel.config import Settings
 from valuemodel.data import (
     DownloadError,
+    NotPublishedError,
     cache_path,
     download_season,
     download_seasons,
@@ -61,6 +63,20 @@ def test_non_csv_response_is_rejected_and_not_cached(
 def test_http_error_is_wrapped(source: FakeSource, settings: Settings) -> None:
     with pytest.raises(DownloadError, match="Could not download"):
         download_season(source.client(), "E0", "9900", settings.raw_dir)
+
+
+def test_a_missing_file_is_reported_as_not_published(
+    source: FakeSource, settings: Settings
+) -> None:
+    with pytest.raises(NotPublishedError, match="Could not download"):
+        download_season(source.client(), "E0", "9900", settings.raw_dir)
+
+
+def test_a_server_error_is_not_mistaken_for_an_unpublished_file(settings: Settings) -> None:
+    client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(500)))
+    with pytest.raises(DownloadError, match="Could not download") as raised:
+        download_season(client, "E0", "2526", settings.raw_dir)
+    assert not isinstance(raised.value, NotPublishedError)
 
 
 def test_pauses_only_between_real_requests(source: FakeSource, settings: Settings) -> None:
