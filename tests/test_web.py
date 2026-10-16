@@ -266,10 +266,27 @@ def test_calculator_lists_each_game_once_with_its_odds() -> None:
 SCHEDULE_TEAMS = ["Arsenal", "Leeds", "Chelsea", "Fulham", "Everton", "Brentford", "Hull", "Wolves"]
 
 
-def write_schedule(settings: Settings, today: date, results_season: str | None = None) -> None:
+ScheduleGame = tuple[str, int, str, str, dict[str, list[int]] | None]
+
+SCHEDULE_GAMES: list[ScheduleGame] = [
+    ("Matchday 9", -3, "Arsenal", "Leeds", {"ft": [1, 0]}),
+    ("Matchday 10", 4, "Arsenal", "Leeds", None),
+    ("Matchday 10", 4, "Chelsea", "Sunderland", None),
+    ("Matchday 11", 11, "Fulham", "Everton", None),
+    ("Matchday 12", 18, "Hull", "Wolves", None),
+]
+
+
+def write_schedule(
+    settings: Settings,
+    today: date,
+    results_season: str | None = None,
+    games: list[ScheduleGame] = SCHEDULE_GAMES,
+) -> None:
     """Cache results for eight real names and this season's schedule of games after today.
 
     The results are filed under this season unless results_season names another.
+    Each game is a round, days from today, home and away teams, and any score.
     """
     season = current_season(today)
     rng = np.random.default_rng(5)
@@ -283,13 +300,6 @@ def write_schedule(settings: Settings, today: date, results_season: str | None =
     results_file.write_text(raw_season(history), encoding="utf-8")
 
     full = {short: long for long, short in SCHEDULE_NAMES.items()}
-    games = [
-        ("Matchday 9", -3, "Arsenal", "Leeds", {"ft": [1, 0]}),
-        ("Matchday 10", 4, "Arsenal", "Leeds", None),
-        ("Matchday 10", 4, "Chelsea", "Sunderland", None),
-        ("Matchday 11", 11, "Fulham", "Everton", None),
-        ("Matchday 12", 18, "Hull", "Wolves", None),
-    ]
     matches = [
         {
             "round": round_name,
@@ -577,6 +587,28 @@ def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> No
     assert leg["chance"] == pytest.approx(likeliest)
     assert cards[0]["price_to_beat"] == pytest.approx(1.03 / likeliest)
     assert views.likely_slip_cards(views.ScheduleView(rounds=1), 0.03) == []
+
+
+def test_likely_slips_take_the_next_full_round_after_a_rearranged_game(
+    settings: Settings,
+) -> None:
+    today = date(2026, 10, 18)
+    games: list[ScheduleGame] = [
+        ("Matchday 6", 2, "Hull", "Wolves", None),
+        ("Matchday 12", 5, "Arsenal", "Leeds", None),
+        ("Matchday 12", 5, "Chelsea", "Fulham", None),
+        ("Matchday 12", 6, "Everton", "Brentford", None),
+        ("Matchday 13", 12, "Leeds", "Chelsea", None),
+        ("Matchday 13", 12, "Fulham", "Arsenal", None),
+        ("Matchday 13", 13, "Brentford", "Hull", None),
+    ]
+    write_schedule(settings, today, games=games)
+    schedule = views.schedule_view(settings, rounds=3, today=today)
+    cards = views.likely_slip_cards(schedule, settings.edge_threshold)
+    assert cards
+    next_round = {"Hull v Wolves", "Arsenal v Leeds", "Chelsea v Fulham", "Everton v Brentford"}
+    for card in cards:
+        assert {leg["key"].split(" ", 1)[1] for leg in card["legs"]} <= next_round
 
 
 @pytest.mark.parametrize(

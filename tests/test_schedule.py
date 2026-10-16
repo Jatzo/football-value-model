@@ -127,6 +127,41 @@ def test_upcoming_games_drop_past_dates_and_keep_the_next_rounds() -> None:
     assert upcoming_games(schedule, date(2026, 11, 1), rounds=3).empty
 
 
+def test_a_rearranged_game_joins_the_next_round_instead_of_replacing_it() -> None:
+    schedule = _schedule(
+        [
+            ("2026-10-20", "Matchday 6"),
+            ("2026-10-23", "Matchday 12"),
+            ("2026-10-24", "Matchday 12"),
+            ("2026-10-24", "Matchday 12"),
+            ("2026-10-31", "Matchday 13"),
+            ("2026-10-31", "Matchday 13"),
+            ("2026-11-01", "Matchday 13"),
+        ]
+    )
+    today = date(2026, 10, 18)
+    assert list(upcoming_games(schedule, today, rounds=1)["round"]) == [
+        "Matchday 6",
+        *["Matchday 12"] * 3,
+    ]
+    assert len(upcoming_games(schedule, today, rounds=2)) == 7
+
+
+def test_a_game_moved_weeks_later_does_not_stretch_the_next_round() -> None:
+    schedule = _schedule(
+        [
+            ("2026-03-07", "Matchday 28"),
+            ("2026-03-08", "Matchday 28"),
+            ("2026-03-14", "Matchday 29"),
+            ("2026-03-14", "Matchday 29"),
+            ("2026-03-15", "Matchday 29"),
+            ("2026-04-16", "Matchday 28"),
+        ]
+    )
+    next_round = upcoming_games(schedule, date(2026, 3, 1), rounds=1)
+    assert list(next_round["date"].dt.day) == [7, 8]
+
+
 def test_predictions_cover_every_outcome_and_skip_teams_with_little_history() -> None:
     history = simulated_seasons(5, 10, 2, with_odds=False)
     games = _schedule([("2024-08-10", "Matchday 1"), ("2024-08-17", "Matchday 2")])

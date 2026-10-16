@@ -568,6 +568,7 @@ class ScheduleRow:
     home_goals: float
     away_goals: float
     both_teams: ChanceCell | None = None
+    next_round: bool = False
 
 
 def schedule_rows(priced: pd.DataFrame, edge_threshold: float) -> list[ScheduleRow]:
@@ -599,6 +600,7 @@ def schedule_rows(priced: pd.DataFrame, edge_threshold: float) -> list[ScheduleR
                 home_goals=game["home_goals"],
                 away_goals=game["away_goals"],
                 both_teams=_both_teams_cell(game, edge_threshold),
+                next_round=bool(game.get("next_round", False)),
             )
         )
     return rows
@@ -626,6 +628,8 @@ def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
         try:
             schedule = load_schedule(path, league)
             games = upcoming_games(schedule, today, rounds if rounds != ALL_ROUNDS else None)
+            next_round = upcoming_games(schedule, today, 1).index
+            games = games.assign(next_round=games.index.isin(next_round))
             if games.empty:
                 view.rows[league] = []
                 continue
@@ -722,9 +726,8 @@ def likely_slip_cards(
     """
     selections, labels = [], {}
     for rows in schedule.rows.values():
-        next_round = rows[0].round if rows else None
         for row in rows:
-            if row.round != next_round or not row.reliable:
+            if not row.next_round or not row.reliable:
                 continue
             key = match_key(row.date, row.home_team, row.away_team)
             labels[key] = match_label(row.date, row.kickoff, row.home_team, row.away_team)

@@ -22,6 +22,10 @@ SCHEDULE_URL = "https://raw.githubusercontent.com/openfootball/football.json/mas
 SCHEDULE_FILES: dict[str, str] = {"E0": "en.1", "E1": "en.2"}
 SCHEDULE_COLUMNS = ["league", "date", "kickoff", "round", "home_team", "away_team"]
 
+# A round's games fall from Friday to Monday at most, so each lies within a
+# few days of the round's middle date. One further away has been moved.
+_ROUND_SPAN = pd.Timedelta(days=3)
+
 
 def schedule_url(league: str, season: str) -> str:
     if league not in SCHEDULE_FILES:
@@ -77,12 +81,25 @@ def upcoming_games(schedule: pd.DataFrame, today: date, rounds: int | None) -> p
 
     Games dated before today are dropped: they have been played, or postponed
     without a new date, and the schedule simply has no score for them yet.
+
+    Rearranged games keep their original round, so a round label alone is a
+    poor guide. Only rounds with at least half as many games left as the
+    largest one count, in order of their middle date, which stops a lone
+    rearranged game standing in for a whole round. The next rounds then run to
+    the last of their games played near that middle date, so a game moved
+    weeks later does not pull everything before it in, while any other game
+    dated before the cutoff, such as a rearranged one, is still shown.
     """
     ahead = schedule[schedule["date"] >= pd.Timestamp(today)]
-    if rounds is None:
+    if rounds is None or ahead.empty:
         return ahead
-    next_rounds = list(dict.fromkeys(ahead["round"]))[:rounds]
-    return ahead[ahead["round"].isin(next_rounds)]
+    dates = ahead.groupby("round")["date"]
+    sizes, middles = dates.size(), dates.median()
+    chosen = middles[sizes * 2 >= sizes.max()].sort_values().index[:rounds]
+    in_chosen = ahead["round"].isin(chosen)
+    near_middle = (ahead["date"] - ahead["round"].map(middles)).abs() <= _ROUND_SPAN
+    cutoff = ahead.loc[in_chosen & near_middle, "date"].max()
+    return ahead[ahead["date"] <= cutoff]
 
 
 def predict_games(history: pd.DataFrame, games: pd.DataFrame, xi: float) -> pd.DataFrame:
