@@ -1,12 +1,52 @@
 # Football Value Model
 
-A football model that prices matches from goals and shots, compares its prices with bookmaker odds and tests the result with an honest walk-forward backtest. Paper trading only.
+A statistical modelling and evaluation project. It forecasts football results from goals and shot data, scores those forecasts against bookmaker prices, and tests them in a walk-forward backtest with paper stakes only. It is not betting advice and it never places a bet.
+
+> **Headline result**
+>
+> The main model forecasts slightly better than a classic Dixon-Coles model and is well calibrated, but it does not beat the market. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,407 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line (mean closing line value of -6.8%), only 20.2% of bets beat the close, and the bankroll fell from 1,000 to 151 units. The Championship gives the same verdict.
+>
+> This is the finding, reported as it came out. Every setting was chosen on earlier seasons before the backtest was run, and none was changed after seeing the results. The full figures are in [Backtest](#backtest).
 
 ![Dashboard summary page](docs/screenshot.png)
 
-## Results in brief
+## What this demonstrates
 
-The model does not beat the market. The main model learns team strengths from both goals and shot-based expected goals. Over three Premier League seasons, 2023/24 to 2025/26, it placed 1,407 paper bets at Bet365's pre-match prices. On average those prices were 6.8% worse than Pinnacle's closing line, only one bet in five beat the close, and the bankroll fell from 1,000 to 151 units. It forecasts slightly better than a classic Dixon-Coles model fitted to goals alone and is well calibrated, but the bookmakers' own prices are better forecasts still. The same holds in the Championship, where shots help more but the model still has no edge. Teams keep their ratings when they move between divisions, so promoted and relegated sides are priced from their first game. The full method and figures are in [Backtest](#backtest).
+- **Walk-forward validation with no lookahead.** Before each round of matches every model is refitted on results known when the odds were collected. [`walkforward.py`](valuemodel/walkforward.py#L19) works out that date, and [a test](tests/test_walkforward.py#L63) rewrites every result after a cutoff and checks no earlier forecast changes. [Another](tests/test_walkforward.py#L161) checks Saturday's results never reach a Sunday forecast.
+- **Separate tuning and test seasons.** Settings are chosen on 2021/22 and 2022/23 and reported on 2023/24 to 2025/26. The split is fixed in [`config.py`](valuemodel/config.py#L41), and the search is in [`tuning.py`](valuemodel/tuning.py).
+- **Proper scoring and calibration analysis.** Log loss, Brier score and ranked probability score in [`scoring.py`](valuemodel/scoring.py) (checked against hand calculations in [`test_scoring.py`](tests/test_scoring.py)), and a calibration table in [`backtest.py`](valuemodel/backtest.py#L288), tested in [`test_backtest.py`](tests/test_backtest.py#L235).
+- **Bootstrap confidence intervals.** Level-stakes ROI comes with a 95% interval from 2,000 resamples of the bets, in [`betting_summary`](valuemodel/backtest.py#L160).
+- **Parameter recovery on simulated data.** Seasons are [simulated from known strengths](tests/simulation.py) and the fitted Poisson and Dixon-Coles parameters [must come back close to the truth](tests/test_models.py#L48). The analytic gradient is [checked against finite differences](tests/test_models.py#L130).
+- **Margin removal.** The proportional and power methods in [`odds.py`](valuemodel/odds.py#L63), with [a test](tests/test_odds.py#L64) that the power method takes more off the longshot.
+- **Fractional Kelly with caps.** Quarter Kelly capped at 2% of the bankroll in [`staking.py`](valuemodel/staking.py#L14). Tests check [no stake without a positive edge](tests/test_staking.py#L13) and [never more than the cap](tests/test_staking.py#L34).
+- **SQLite storage and CI.** Each run is saved in one transaction by [`store.py`](valuemodel/store.py#L145), and [a test](tests/test_store.py#L90) checks a failed save leaves nothing behind. [GitHub Actions](.github/workflows/ci.yml) runs ruff and pytest on every push and pull request.
+
+## Key decisions and trade-offs
+
+**Tune on held-out seasons.** The time decay and the share of shot-based expected goals were chosen by walking forward through 2021/22 and 2022/23 on the same refit schedule as the backtest. The backtest seasons played no part, so their results are an honest out-of-sample test. The Championship is a stricter test still. It was never looked at while settings were chosen, and it is backtested with the Premier League settings unchanged.
+
+**Use the power method to remove the margin.** Bookmakers tend to load their margin onto unlikely outcomes. The proportional method scales every outcome down by the same factor, so it leaves longshots looking too likely. The power method raises every implied probability to one exponent, which takes more off longshots. It is the default, and the proportional method stays available as a setting.
+
+**Link each league with the division below.** A model fitted on one league knows nothing about a newly promoted side, so it used to skip that team's first 10 games. Fitting the Premier League with the Championship, and the Championship with League One as well, puts every team on one scale through the teams that move between them. This was checked on the tuning seasons before it was adopted, where it forecast better on the matches both versions priced. The cost is that a promoted side is rated on its old division's form, and in the backtest seasons that overrated promoted Premier League sides.
+
+**Do not adopt a result after seeing the test seasons.** Three results on the backtest seasons would have looked better with hindsight: the even blend of goals and shots first tried beat the tuned blend, the single-league fit beat the linked one, and bets the model gave a 30% to 45% chance made money. None was adopted. Changing a setting after seeing the test seasons would turn them into tuning seasons, and the reported results would no longer be out of sample.
+
+## Quick start
+
+You need Python 3.12 or later.
+
+```bash
+git clone https://github.com/Jatzo/football-value-model.git
+cd football-value-model
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+valuemodel download
+valuemodel backtest
+flask --app valuemodel.web run
+```
+
+On Windows, activate the environment with `.venv\Scripts\activate` instead. `valuemodel download` fetches the Premier League and the Championship from 2019/20 to 2025/26 and caches them in `data/raw/`. `valuemodel backtest` prints the report described below and saves the run to `data/valuemodel.sqlite`, and the dashboard is then at http://127.0.0.1:5000. [Using it](#using-it) covers the other commands.
 
 ## How the model works
 
@@ -37,7 +77,7 @@ For each candidate `xi`, Dixon-Coles walked through 2021/22 and 2022/23 on exact
 | 0.004 | 0.97659 | 0.20193 |
 | 0.005 | 0.97848 | 0.20238 |
 
-Both scores are lowest at 0.003, so a match from about 230 days ago counts half as much as one played today. The Poisson baseline gives the same answer, and anything from about 0.0025 to 0.004 would give very similar forecasts. `valuemodel tune-xi --model dixon-coles` reproduces the table. The main model's time decay is chosen together with its use of shots, below.
+Both scores are lowest at 0.003, so a match from about 230 days ago counts half as much as one played today. The Poisson baseline gives the same answer, and anything from about 0.0025 to 0.004 would give very similar forecasts. These settings were chosen with the Premier League fitted on its own, before the divisions were linked, so `valuemodel tune-xi --model dixon-coles --single-league` reproduces the table. The main model's time decay is chosen together with its use of shots, below.
 
 ### Shot-based expected goals
 
@@ -57,13 +97,13 @@ The main model, called shots-adjusted, fits each team's strengths to a blend of 
 | 0.007 | 0.6 | 0.96817 | 0.19973 |
 | 0.007 | 0.7 | 0.96831 | 0.19976 |
 
-Wider searches found nothing better, and fitting goals only or expected goals only was clearly worse (ranked probability scores of 0.2023 and 0.2014 at an `xi` of 0.005). A 60% share of expected goals and an `xi` of 0.006 forecast best, so a match about 115 days old counts half as much as one played today. Shots are less noisy than goals, so recent matches can safely count for more than in the goal-only models. `valuemodel tune-xi` and `valuemodel tune-shots` reproduce the search one setting at a time. The Dixon-Coles correction only applies to whole-number scores, so it has nothing to act on with a blend, and this model is fitted as Poisson.
+Wider searches found nothing better, and fitting goals only or expected goals only was clearly worse (ranked probability scores of 0.2023 and 0.2014 at an `xi` of 0.005). A 60% share of expected goals and an `xi` of 0.006 forecast best, so a match about 115 days old counts half as much as one played today. Shots are less noisy than goals, so recent matches can safely count for more than in the goal-only models. `valuemodel tune-xi --single-league` and `valuemodel tune-shots --single-league` reproduce the search one setting at a time. The Dixon-Coles correction only applies to whole-number scores, so it has nothing to act on with a blend, and this model is fitted as Poisson.
 
 ### Teams that change division
 
 Every season three teams are promoted to the Premier League and three are relegated from it. A model fitted on one league knows nothing about a promoted side, so it used to skip that team's first 10 games. Instead, each league is now fitted together with the division below it, and the Championship with League One as well. The two divisions never play each other, but the six teams that move between them each season put every team on one scale, so a promoted side starts with the ratings it earned in the Championship. League One is downloaded only for this purpose. Its own matches are never priced, because the model was never tuned or tested on them.
 
-The linked leagues share one home advantage. From 2019/20 to 2025/26 it was 0.19 in the Premier League, 0.21 in the Championship and 0.22 in League One (the log of home goals over away goals), while it ranged from 0.06 to 0.29 between seasons of the same league.
+The linked leagues share one home advantage. From 2019/20 to 2025/26, leaving out 2020/21 when matches were played without crowds, it was 0.19 in the Premier League, 0.21 in the Championship and 0.22 in League One (the log of home goals over away goals). Within the Premier League it ranged from 0.06 to 0.29 between seasons, so the gap between divisions is small next to the noise from one season to the next.
 
 This was checked on the tuning seasons before it was adopted, comparing the main model fitted on one league with the linked fit:
 
@@ -83,99 +123,6 @@ A bookmaker's odds imply a probability of `1 / odds` for each outcome. Those pro
 A bet has value when `model probability * odds - 1` is at least the edge threshold, 3% by default. This uses the odds actually on offer, margin included, because that is the price a bet would be struck at. At most one bet is taken per market per match: the outcome with the biggest edge in the match result, and the same in over/under 2.5 goals.
 
 Stakes are paper only. The default is quarter Kelly, a quarter of the stake the Kelly criterion recommends, because full Kelly assumes the model's probabilities are exactly right. Flat staking is the alternative. Either way no single bet can exceed 2% of the current bankroll, and nothing is staked without a positive edge.
-
-## Quick start
-
-You need Python 3.12 or later.
-
-```bash
-git clone https://github.com/Jatzo/football-value-model.git
-cd football-value-model
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-valuemodel download
-pytest
-```
-
-On Windows, activate the environment with `.venv\Scripts\activate` instead.
-
-`valuemodel download` fetches the Premier League and the Championship from 2019/20 to 2025/26, waiting a couple of seconds between files, and caches them in `data/raw/` so later runs do not touch the network. Use `--leagues`, `--seasons` and `--refresh` to change what is fetched. A Championship backtest also needs League One: `valuemodel download --leagues E2`.
-
-Run the backtest, which prints the report below and saves the run to `data/valuemodel.sqlite`:
-
-```bash
-valuemodel backtest
-```
-
-Price a single match, optionally against a bookmaker's decimal odds to see the edge and the paper stake. Team names are spelt as the data source spells them, for example `Man United` and `Nott'm Forest`:
-
-```bash
-valuemodel predict --home Arsenal --away Chelsea
-valuemodel predict --home Arsenal --away Chelsea --odds 1.70 3.90 5.25 --totals-odds 1.95 1.95
-```
-
-List the paper bets on upcoming games. `valuemodel fixtures` fetches the latest fixtures, results and season schedules, and `valuemodel picks` ranks every listed game where Bet365's odds beat the model's fair odds by at least 3%, biggest edge first, with its paper stake. It also prints, for the next round of each league, the lowest Bet365 odds at which each outcome would be a value bet, so games the fixtures file does not list yet can be checked against the bookmaker by hand:
-
-```bash
-valuemodel fixtures
-valuemodel picks
-```
-
-`valuemodel slips` suggests the three best slips of a chosen size that can be built from those paper bets: the combinations of value bets from different matches with the highest combined edge, each with a paper stake at its combined odds. The size runs from a single to a six-fold, set with `--legs` (a treble by default), and `--bet` keeps every leg to one bet type: match result, over/under 2.5 goals or both teams to score. Sizes are chosen rather than ranked against each other, because when every leg has an edge, adding legs always raises the combined edge while cutting the chance of winning, so the biggest accumulator would always come out on top. The three options often share legs, the second and third usually swapping one leg for the next best choice. Finding them takes a short exact search rather than trying every combination, which a test checks against trying every combination.
-
-Value slips need odds, so they only appear once the fixtures file lists the round. Before that, `valuemodel slips` and the fixtures page offer the three likeliest slips of the same size from the next round of each league, one leg per match, with the model's chance, its fair odds and the lowest Bet365 odds that would make the slip a value bet. With any bet type allowed these are mostly goals bets, because few match results reach a 60% chance, so choosing match result gives the likeliest wins instead. The likeliest slips can also use both teams to score, which the model prices from the same scorelines as the chance that each side scores at least once. The fixtures file has no odds for that market, so it never appears in value slips or the backtest. Loading a slip into the bet slip leaves the odds for you to type in from the bookmaker.
-
-### Dashboard
-
-```bash
-valuemodel fixtures
-flask --app valuemodel.web run
-```
-
-Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page starts with the same ranked paper bets, each with a box to type a stake and see what it would return, followed by the three best suggested slips for a chosen number of legs, from one to six, and a chosen bet type, each of which loads into the bet slip with one click. It then prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. A bet slip takes any upcoming game, outcome and odds, or a paper bet with one click. One selection is a single; two or more make an accumulator, whose odds and model chances multiply. The slip shows the combined odds, the return and profit for a stake, the model's chance that every leg wins, the edge, and whether it counts as value. It takes one leg per match, because outcomes of the same match are linked and their chances cannot simply be multiplied. Below that, a season schedule section gives the model's chances, fair odds, prices to beat, the chance both teams score and expected goals for the next few rounds of the Premier League and Championship, or every remaining round. It has no odds, so it is the model's view of what might happen rather than a list of bets, and games further ahead use today's team ratings. The bets page can also be ordered by the model's chance of each bet winning.
-
-![Fixtures page with three treble options for the next round and the first loaded into the bet slip](docs/screenshot-fixtures.png)
-
-The screenshot shows the three likeliest trebles of any bet type for the round starting 9 October 2026, before the fixtures file listed any odds, with the first loaded into the bet slip and waiting for Bet365's prices.
-
-The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
-
-### Development
-
-```bash
-pytest
-ruff check .
-ruff format --check .
-```
-
-GitHub Actions runs the same checks on every push and pull request. The code is organised as follows:
-
-| Module | Purpose |
-| --- | --- |
-| `cli.py`, `config.py` | The `valuemodel` command, settings, leagues and seasons |
-| `data.py`, `teams.py`, `fixtures.py`, `schedule.py` | Downloading, caching, cleaning and standardising results, odds, upcoming fixtures and season schedules |
-| `models/`, `expected_goals.py` | Poisson, Dixon-Coles and shots-adjusted models with time decay, and shot-based expected goals |
-| `markets.py`, `odds.py`, `staking.py`, `picks.py` | Market probabilities, margin removal, value detection, stakes, upcoming paper bets and prices to beat |
-| `walkforward.py`, `tuning.py`, `backtest.py` | Walk-forward forecasting, choosing settings, and the backtest metrics |
-| `store.py`, `report.py`, `labels.py`, `web/` | SQLite storage, the text report, shared display formats and the dashboard |
-
-## Configuration
-
-Settings come from environment variables. Copy `.env.example` to `.env` to change them.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `VALUEMODEL_DATA_DIR` | `data` | Where downloaded files and the database are kept |
-| `VALUEMODEL_REQUEST_DELAY` | `2` | Seconds to wait between downloads |
-| `VALUEMODEL_MARGIN_METHOD` | `power` | How the margin is removed: `power` or `proportional` |
-| `VALUEMODEL_EDGE_THRESHOLD` | `0.03` | Smallest edge that counts as value |
-| `VALUEMODEL_STAKING` | `kelly` | `kelly` or `flat` |
-| `VALUEMODEL_KELLY_FRACTION` | `0.25` | Share of the full Kelly stake to use |
-| `VALUEMODEL_MAX_STAKE` | `0.02` | Largest stake on one bet, as a share of the current bankroll |
-| `VALUEMODEL_FLAT_STAKE` | `0.01` | Flat stake, as a share of the starting bankroll |
-| `VALUEMODEL_STARTING_BANKROLL` | `1000` | Starting bankroll in units |
-| `VALUEMODEL_BOOKMAKER` | `b365` | Whose pre-match prices bets are taken at: `b365` or `pinnacle`. With `pinnacle` the follow-the-market strategy is skipped |
 
 ## Backtest
 
@@ -274,29 +221,80 @@ The same backtest was run on the Championship, with every setting left exactly a
 
 Shots help more here than in the Premier League. The main model beats Dixon-Coles on all three scores, by 0.0019 in ranked probability score against 0.0009 in the Premier League, and its forecasts come closer to Bet365's. The Championship market is probably priced less sharply than the Premier League. The verdict is still the same, though: a mean closing line value of -6.0% means the prices taken were worse than where the market closed, so the model has no edge. The market strategy's positive closing line value comes from only 23 bets, too few to read anything into.
 
-## Limitations
+## Using it
 
-**Data quality.** Results and odds come from one free source whose column names, date formats and encodings have changed over the years. The loader maps every era onto one schema and is tested against real extracts from 2005/06, 2015/16 and 2025/26. Rows that fail basic checks, such as a result that does not match the score, are logged and left out rather than corrected by guesswork. Most of 2020/21 was played without crowds and home advantage almost disappeared. Those matches are only used as training history, and time decay gives them little weight by the time any forecast is scored.
+`valuemodel download` waits a couple of seconds between files and caches them, so later runs do not touch the network. Use `--leagues`, `--seasons` and `--refresh` to change what is fetched. A Championship backtest also needs League One: `valuemodel download --leagues E2`. Run `pytest` after downloading to check the install.
 
-**When the odds were captured.** The pre-match odds are a single snapshot taken on Friday or Tuesday afternoon, roughly a day before kick-off. They are not the price available at any chosen moment, and the backtest assumes every stake could have been placed at that snapshot.
+Price a single match, optionally against a bookmaker's decimal odds to see the edge and the paper stake. Team names are spelt as the data source spells them, for example `Man United` and `Nott'm Forest`:
 
-**Promoted teams.** A newly promoted side is rated from its results in the division below, which says nothing about the players it signs over the summer. In the backtest seasons the model overrated promoted Premier League sides, as described above. A team with fewer than 10 matches across the linked leagues in the training window is still flagged and its games are not priced or bet on, which now only happens to a side coming up from below League One.
+```bash
+valuemodel predict --home Arsenal --away Chelsea
+valuemodel predict --home Arsenal --away Chelsea --odds 1.70 3.90 5.25 --totals-odds 1.95 1.95
+```
 
-**Backtests are not real betting.** Bookmakers limit accounts that win, prices move once money arrives, and the gap between a backtest and real results is almost always unfavourable. Here the backtest already loses, so this mostly matters as a warning against reading anything into the market strategy's seven bets.
+List the paper bets on upcoming games. `valuemodel fixtures` fetches the latest fixtures, results and season schedules, and `valuemodel picks` ranks every listed game where Bet365's odds beat the model's fair odds by at least 3%, biggest edge first, with its paper stake. It also prints, for the next round of each league, the lowest Bet365 odds at which each outcome would be a value bet, so games the fixtures file does not list yet can be checked against the bookmaker by hand:
 
-## Not betting advice
+```bash
+valuemodel fixtures
+valuemodel picks
+```
 
-This is a statistics project. It does not place bets and nothing in it is a recommendation to gamble. If gambling is causing you problems, [BeGambleAware](https://www.begambleaware.org/) offers free, confidential support.
+`valuemodel slips` suggests the three best slips of a chosen size that can be built from those paper bets: the combinations of value bets from different matches with the highest combined edge, each with a paper stake at its combined odds. The size runs from a single to a six-fold, set with `--legs` (a treble by default), and `--bet` keeps every leg to one bet type: match result, over/under 2.5 goals or both teams to score. Sizes are chosen rather than ranked against each other, because when every leg has an edge, adding legs always raises the combined edge while cutting the chance of winning, so the biggest accumulator would always come out on top. The three options often share legs, the second and third usually swapping one leg for the next best choice. Finding them takes a short exact search rather than trying every combination, which a test checks against trying every combination.
 
-## Credits
+Value slips need odds, so they only appear once the fixtures file lists the round. Before that, `valuemodel slips` and the fixtures page offer the three likeliest slips of the same size from the next round of each league, one leg per match, with the model's chance, its fair odds and the lowest Bet365 odds that would make the slip a value bet. With any bet type allowed these are mostly goals bets, because few match results reach a 60% chance, so choosing match result gives the likeliest wins instead. The likeliest slips can also use both teams to score, which the model prices from the same scorelines as the chance that each side scores at least once. The fixtures file has no odds for that market, so it never appears in value slips or the backtest. Loading a slip into the bet slip leaves the odds for you to type in from the bookmaker.
 
-Results and odds from [football-data.co.uk](https://www.football-data.co.uk/). Season schedules from [openfootball](https://github.com/openfootball/football.json), published into the public domain. The model follows Dixon, M. J. and Coles, S. G. (1997), "Modelling association football scores and inefficiencies in the football betting market", *Journal of the Royal Statistical Society: Series C (Applied Statistics)*, 46(2), 265 to 280.
+### Dashboard
 
-## Licence
+```bash
+valuemodel fixtures
+flask --app valuemodel.web run
+```
 
-MIT. See [LICENSE](LICENSE).
+Then open http://127.0.0.1:5000. The summary page leads with closing line value and shows a bankroll chart for each strategy. The bets page has the full bet log with filters for strategy, league, season, market and result. The models page compares the forecasters and shows a calibration chart. The fixtures page starts with the same ranked paper bets, each with a box to type a stake and see what it would return, followed by the three best suggested slips for a chosen number of legs, from one to six, and a chosen bet type, each of which loads into the bet slip with one click. It then prices upcoming matches next to Bet365's odds, highlights value, and lists each match's most likely result in order of the model's confidence. A bet slip takes any upcoming game, outcome and odds, or a paper bet with one click. One selection is a single; two or more make an accumulator, whose odds and model chances multiply. The slip shows the combined odds, the return and profit for a stake, the model's chance that every leg wins, the edge, and whether it counts as value. It takes one leg per match, because outcomes of the same match are linked and their chances cannot simply be multiplied. Below that, a season schedule section gives the model's chances, fair odds, prices to beat, the chance both teams score and expected goals for the next few rounds of the Premier League and Championship, or every remaining round. It has no odds, so it is the model's view of what might happen rather than a list of bets, and games further ahead use today's team ratings. The bets page can also be ordered by the model's chance of each bet winning.
 
-## Technical skills
+![Fixtures page with three treble options for the next round and the first loaded into the bet slip](docs/screenshot-fixtures.png)
+
+The screenshot shows the three likeliest trebles of any bet type for the round starting 9 October 2026, before the fixtures file listed any odds, with the first loaded into the bet slip and waiting for Bet365's prices.
+
+The dashboard only reads the local database and cached files. `valuemodel fixtures` is what fetches the latest fixtures file, refreshes this season's results and downloads the season schedules, for the Premier League and the Championship unless `--leagues` says otherwise. The fixtures file covers many leagues but only the next few days, once bookmakers have priced the games, and the model can only price leagues it has results for. The schedules cover the whole season. Charts use Chart.js from a CDN, so they need an internet connection.
+
+### Configuration
+
+Settings come from environment variables. Copy `.env.example` to `.env` to change them.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `VALUEMODEL_DATA_DIR` | `data` | Where downloaded files and the database are kept |
+| `VALUEMODEL_REQUEST_DELAY` | `2` | Seconds to wait between downloads |
+| `VALUEMODEL_MARGIN_METHOD` | `power` | How the margin is removed: `power` or `proportional` |
+| `VALUEMODEL_EDGE_THRESHOLD` | `0.03` | Smallest edge that counts as value |
+| `VALUEMODEL_STAKING` | `kelly` | `kelly` or `flat` |
+| `VALUEMODEL_KELLY_FRACTION` | `0.25` | Share of the full Kelly stake to use |
+| `VALUEMODEL_MAX_STAKE` | `0.02` | Largest stake on one bet, as a share of the current bankroll |
+| `VALUEMODEL_FLAT_STAKE` | `0.01` | Flat stake, as a share of the starting bankroll |
+| `VALUEMODEL_STARTING_BANKROLL` | `1000` | Starting bankroll in units |
+| `VALUEMODEL_BOOKMAKER` | `b365` | Whose pre-match prices bets are taken at: `b365` or `pinnacle`. With `pinnacle` the follow-the-market strategy is skipped |
+
+### Development
+
+```bash
+pytest
+ruff check .
+ruff format --check .
+```
+
+GitHub Actions runs the same checks on every push and pull request. The code is organised as follows:
+
+| Module | Purpose |
+| --- | --- |
+| `cli.py`, `config.py` | The `valuemodel` command, settings, leagues and seasons |
+| `data.py`, `teams.py`, `fixtures.py`, `schedule.py` | Downloading, caching, cleaning and standardising results, odds, upcoming fixtures and season schedules |
+| `models/`, `expected_goals.py` | Poisson, Dixon-Coles and shots-adjusted models with time decay, and shot-based expected goals |
+| `markets.py`, `odds.py`, `staking.py`, `picks.py` | Market probabilities, margin removal, value detection, stakes, upcoming paper bets and prices to beat |
+| `walkforward.py`, `tuning.py`, `backtest.py`, `scoring.py` | Walk-forward forecasting, choosing settings, the backtest metrics and forecast scores |
+| `store.py`, `report.py`, `labels.py`, `web/` | SQLite storage, the text report, shared display formats and the dashboard |
+
+### Technical skills
 
 | Area | Skills used in this project |
 | --- | --- |
@@ -311,3 +309,25 @@ MIT. See [LICENSE](LICENSE).
 | Command line | argparse subcommands, input validation with clear error messages, close-match suggestions for misspelt names |
 | Testing | pytest with fixtures and parametrisation, simulation tests that recover known parameters, gradient checks, a test proven to catch lookahead, mocked HTTP, Flask's test client, fixtures cut from real data files |
 | Engineering practice | ruff for linting and formatting, GitHub Actions CI, configuration through environment variables, small focused commits |
+
+## Limitations
+
+**Data quality.** Results and odds come from one free source whose column names, date formats and encodings have changed over the years. The loader maps every era onto one schema and is tested against real extracts from 2005/06, 2015/16 and 2025/26. Rows that fail basic checks, such as a result that does not match the score, are logged and left out rather than corrected by guesswork. Most of 2020/21 was played without crowds and home advantage almost disappeared. Those matches are only used as training history, and time decay gives them little weight by the time any forecast is scored.
+
+**When the odds were captured.** The pre-match odds are a single snapshot taken on Friday or Tuesday afternoon, roughly a day before kick-off. They are not the price available at any chosen moment, and the backtest assumes every stake could have been placed at that snapshot.
+
+**Promoted teams.** A newly promoted side is rated from its results in the division below, which says nothing about the players it signs over the summer. In the backtest seasons the model overrated promoted Premier League sides, as described above. A team with fewer than 10 matches across the linked leagues in the training window is still flagged and its games are not priced or bet on, which now only happens to a side coming up from below League One.
+
+**Backtests are not real betting.** Bookmakers limit accounts that win, prices move once money arrives, and the gap between a backtest and real results is almost always unfavourable. Here the backtest already loses, so this mostly matters as a warning against reading anything into the market strategy's seven bets.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
+
+## Credits
+
+Results and odds from [football-data.co.uk](https://www.football-data.co.uk/). Season schedules from [openfootball](https://github.com/openfootball/football.json), published into the public domain. The model follows Dixon, M. J. and Coles, S. G. (1997), "Modelling association football scores and inefficiencies in the football betting market", *Journal of the Royal Statistical Society: Series C (Applied Statistics)*, 46(2), 265 to 280.
+
+## Not betting advice
+
+This is a statistics project. It does not place bets and nothing in it is a recommendation to gamble. If gambling is causing you problems, [BeGambleAware](https://www.begambleaware.org/) offers free, confidential support.
