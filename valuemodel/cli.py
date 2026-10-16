@@ -419,7 +419,8 @@ def run_picks(today: date | None = None) -> int:
     settings = load_settings()
     today = today or date.today()
     bookmaker = BOOKMAKERS[settings.bookmaker]
-    fixtures = views.fixtures_view(settings)
+    history = views.recent_history(settings, today)
+    fixtures = views.fixtures_view(settings, history)
     if fixtures.status == "missing":
         raise FileNotFoundError("No fixtures downloaded yet. Run: valuemodel fixtures")
 
@@ -433,7 +434,7 @@ def run_picks(today: date | None = None) -> int:
     else:
         print(f"No listed game has a value bet at {bookmaker}'s current odds.")
 
-    schedule = views.schedule_view(settings, rounds=1, today=today)
+    schedule = views.schedule_view(settings, history, rounds=1, today=today)
     if schedule.missing:
         print("\nNo season schedule downloaded yet. Run: valuemodel fixtures")
     for league, games in schedule.rows.items():
@@ -457,7 +458,8 @@ def run_slips(
     settings = load_settings()
     today = today or date.today()
     bookmaker = BOOKMAKERS[settings.bookmaker]
-    fixtures = views.fixtures_view(settings, legs, bet_type)
+    history = views.recent_history(settings, today)
+    fixtures = views.fixtures_view(settings, history, legs, bet_type)
     if fixtures.status == "missing":
         raise FileNotFoundError("No fixtures downloaded yet. Run: valuemodel fixtures")
     if fixtures.slips:
@@ -488,7 +490,7 @@ def run_slips(
     else:
         print(f"No value slips: no listed game has a value bet at {bookmaker}'s current odds.\n")
 
-    schedule = views.schedule_view(settings, rounds=1, today=today)
+    schedule = views.schedule_view(settings, history, rounds=1, today=today)
     likely = views.likely_slip_cards(schedule, settings.edge_threshold, legs, bet_type)
     if likely:
         print("Likeliest slips for the next round, which need no odds\n")

@@ -129,8 +129,10 @@ def fixtures() -> str:
     rounds = views.parse_rounds(request.args.get("rounds"))
     legs = views.parse_legs(request.args.get("legs"))
     bet_type = views.parse_bet_type(request.args.get("bet"))
-    view = views.fixtures_view(settings, legs, bet_type)
-    schedule = views.schedule_view(settings, rounds, date.today())
+    today = date.today()
+    history = views.recent_history(settings, today)
+    view = views.fixtures_view(settings, history, legs, bet_type)
+    schedule = views.schedule_view(settings, history, rounds, today)
     return render_template(
         "fixtures.html",
         view=view,

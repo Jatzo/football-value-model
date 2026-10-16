@@ -318,7 +318,9 @@ def write_schedule(
 def test_schedule_view_shows_the_next_rounds(settings: Settings) -> None:
     today = date(2026, 10, 4)
     write_schedule(settings, today)
-    view = views.schedule_view(settings, rounds=2, today=today)
+    view = views.schedule_view(
+        settings, views.recent_history(settings, today), rounds=2, today=today
+    )
     assert not view.missing and not view.problems
     games = view.rows["E0"]
     assert [(game.round, game.home_team) for game in games] == [
@@ -335,14 +337,23 @@ def test_schedule_view_shows_the_next_rounds(settings: Settings) -> None:
     assert home.price_to_beat == pytest.approx((1 + settings.edge_threshold) / home.chance)
     # Sunderland have no results in the cache, so the game is listed but not priced.
     assert not chelsea.reliable and chelsea.cells == []
-    assert len(views.schedule_view(settings, views.ALL_ROUNDS, today).rows["E0"]) == 4
+    assert (
+        len(
+            views.schedule_view(
+                settings, views.recent_history(settings, today), views.ALL_ROUNDS, today
+            ).rows["E0"]
+        )
+        == 4
+    )
 
 
 def test_schedule_view_uses_last_season_before_this_one_has_results(settings: Settings) -> None:
     """In August the new season has no results yet, so the fit rests on the season before."""
     today = date(2027, 8, 15)
     write_schedule(settings, today, results_season="2627")
-    view = views.schedule_view(settings, rounds=3, today=today)
+    view = views.schedule_view(
+        settings, views.recent_history(settings, today), rounds=3, today=today
+    )
     assert not view.problems
     assert view.rows["E0"][0].reliable
 
@@ -351,7 +362,9 @@ def test_schedule_view_names_leagues_it_cannot_show(settings: Settings) -> None:
     today = date(2026, 10, 4)
     write_schedule(settings, today)
     (settings.raw_dir / f"E0_{current_season(today)}.csv").unlink()
-    view = views.schedule_view(settings, rounds=3, today=today)
+    view = views.schedule_view(
+        settings, views.recent_history(settings, today), rounds=3, today=today
+    )
     assert view.problems == {"E0": "no cached results"}
 
 
@@ -378,6 +391,26 @@ def test_fixtures_page_shows_the_season_schedule(
     assert "Likeliest slips for the next round" in suggested
     assert "Single, option 1" in suggested
     assert "&#34;odds&#34;: null" in suggested or '"odds": null' in suggested
+
+
+def test_fixtures_page_reads_the_cached_results_once(
+    empty_client: FlaskClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    today = date.today()
+    write_schedule(settings, today)
+    kickoff = (today + timedelta(days=4)).strftime("%d/%m/%Y")
+    (settings.raw_dir / "fixtures.csv").write_text(
+        "Div,Date,Time,HomeTeam,AwayTeam,B365H,B365D,B365A,B365>2.5,B365<2.5\n"
+        f"E0,{kickoff},15:00,Arsenal,Leeds,2.0,3.5,3.5,1.9,1.9\n",
+        encoding="utf-8",
+    )
+    loads = []
+    load_available = views.load_available
+    monkeypatch.setattr(
+        views, "load_available", lambda *args: loads.append(args) or load_available(*args)
+    )
+    assert empty_client.get("/fixtures").status_code == 200
+    assert len(loads) == 1
 
 
 def test_headline_cards_lead_with_closing_line_value(result: BacktestResult) -> None:
@@ -565,7 +598,9 @@ def test_slip_cards_describe_each_leg_for_the_bet_slip() -> None:
 def test_likely_slips_come_from_each_league_next_round(settings: Settings) -> None:
     today = date(2026, 10, 4)
     write_schedule(settings, today)
-    schedule = views.schedule_view(settings, rounds=3, today=today)
+    schedule = views.schedule_view(
+        settings, views.recent_history(settings, today), rounds=3, today=today
+    )
     # Matchday 10 is next, and Sunderland's game there cannot be priced, so only
     # Arsenal v Leeds is left: no treble, and three singles from its outcomes.
     assert views.likely_slip_cards(schedule, settings.edge_threshold) == []
@@ -603,7 +638,9 @@ def test_likely_slips_take_the_next_full_round_after_a_rearranged_game(
         ("Matchday 13", 13, "Brentford", "Hull", None),
     ]
     write_schedule(settings, today, games=games)
-    schedule = views.schedule_view(settings, rounds=3, today=today)
+    schedule = views.schedule_view(
+        settings, views.recent_history(settings, today), rounds=3, today=today
+    )
     cards = views.likely_slip_cards(schedule, settings.edge_threshold)
     assert cards
     next_round = {"Hull v Wolves", "Arsenal v Leeds", "Chelsea v Fulham", "Everton v Brentford"}
@@ -628,7 +665,9 @@ def test_parse_bet_type(value: str | None, expected: str) -> None:
 def test_schedule_and_slips_include_both_teams_to_score(settings: Settings) -> None:
     today = date(2026, 10, 4)
     write_schedule(settings, today)
-    schedule = views.schedule_view(settings, rounds=3, today=today)
+    schedule = views.schedule_view(
+        settings, views.recent_history(settings, today), rounds=3, today=today
+    )
     arsenal = schedule.rows["E0"][0]
     assert arsenal.both_teams is not None
     yes = arsenal.both_teams.chance

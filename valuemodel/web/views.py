@@ -424,8 +424,20 @@ class FixturesView:
     slips: list[dict[str, object]] = field(default_factory=list)
 
 
+def recent_history(settings: Settings, today: date) -> pd.DataFrame:
+    """Every cached league's results for the seasons a fit made today can use.
+
+    The fixtures page and the schedule both fit on these, so they are read once
+    and shared rather than loaded again for each league.
+    """
+    return load_available(LEAGUES, history_seasons([current_season(today)]), settings)
+
+
 def fixtures_view(
-    settings: Settings, legs: int = DEFAULT_LEGS, bet_type: str = DEFAULT_BET_TYPE
+    settings: Settings,
+    history: pd.DataFrame,
+    legs: int = DEFAULT_LEGS,
+    bet_type: str = DEFAULT_BET_TYPE,
 ) -> FixturesView:
     path = fixtures_path(settings)
     if not path.exists():
@@ -434,9 +446,6 @@ def fixtures_view(
     if fixtures.empty:
         return FixturesView(status="empty", fetched=fetched_at(path))
 
-    leagues = [league for league in dict.fromkeys(fixtures["league"]) if league in LEAGUES]
-    sources = dict.fromkeys(source for league in leagues for source in linked_leagues(league))
-    history = load_available(sources, history_seasons([current_season()]), settings)
     if history.empty:
         return FixturesView(
             status="no_history",
@@ -617,7 +626,9 @@ class ScheduleView:
         return not self.rows and not self.problems
 
 
-def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
+def schedule_view(
+    settings: Settings, history: pd.DataFrame, rounds: int, today: date
+) -> ScheduleView:
     """The main model's view of each league's coming rounds, from the saved schedules."""
     season = current_season(today)
     view = ScheduleView(rounds=rounds)
@@ -633,11 +644,11 @@ def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
             if games.empty:
                 view.rows[league] = []
                 continue
-            history = load_available(linked_leagues(league), history_seasons([season]), settings)
-            if history.empty:
+            linked = history[history["league"].isin(linked_leagues(league))]
+            if linked.empty:
                 view.problems[league] = "no cached results"
                 continue
-            priced = predict_games(history, games, MODEL_XI[MAIN_MODEL])
+            priced = predict_games(linked, games, MODEL_XI[MAIN_MODEL])
         except (ValueError, RuntimeError) as error:
             view.problems[league] = str(error)
             continue

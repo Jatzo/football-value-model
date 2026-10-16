@@ -62,6 +62,12 @@ def test_bad_arguments_are_rejected(
     assert message in capsys.readouterr().err
 
 
+@pytest.fixture(autouse=True)
+def no_cached_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep picks and slips from reading the real data folder."""
+    monkeypatch.setattr(views, "recent_history", lambda *_: pd.DataFrame())
+
+
 @pytest.fixture
 def simulated_cache(clean_environment: pytest.MonkeyPatch) -> pd.DataFrame:
     """Replace the cached files with a simulated league covering history and tuning seasons."""
@@ -425,7 +431,7 @@ def test_slips_pass_the_chosen_size_on(
 ) -> None:
     seen = []
 
-    def fixtures_view(_: object, legs: int, bet_type: str) -> views.FixturesView:
+    def fixtures_view(_: object, __: object, legs: int, bet_type: str) -> views.FixturesView:
         seen.append((legs, bet_type))
         return views.FixturesView(status="ok", picks=[{"outcome": "home"}])
 
