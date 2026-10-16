@@ -17,11 +17,11 @@ from valuemodel.backtest import (
     probability_bands,
 )
 from valuemodel.config import (
-    DEFAULT_SEASONS,
     LEAGUES,
     MODEL_XI,
     Settings,
     current_season,
+    history_seasons,
     linked_leagues,
 )
 from valuemodel.data import load_available
@@ -436,7 +436,7 @@ def fixtures_view(
 
     leagues = [league for league in dict.fromkeys(fixtures["league"]) if league in LEAGUES]
     sources = dict.fromkeys(source for league in leagues for source in linked_leagues(league))
-    history = load_available(sources, [*DEFAULT_SEASONS, current_season()], settings)
+    history = load_available(sources, history_seasons([current_season()]), settings)
     if history.empty:
         return FixturesView(
             status="no_history",
@@ -629,7 +629,7 @@ def schedule_view(settings: Settings, rounds: int, today: date) -> ScheduleView:
             if games.empty:
                 view.rows[league] = []
                 continue
-            history = load_available(linked_leagues(league), [*DEFAULT_SEASONS, season], settings)
+            history = load_available(linked_leagues(league), history_seasons([season]), settings)
             if history.empty:
                 view.problems[league] = "no cached results"
                 continue

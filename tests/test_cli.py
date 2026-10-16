@@ -92,6 +92,21 @@ def test_predict_prints_fair_odds(
         assert label in out
 
 
+def test_predict_loads_the_seasons_around_its_date(
+    simulated_cache: pd.DataFrame, clean_environment: pytest.MonkeyPatch
+) -> None:
+    requested = []
+
+    def load_available(_: object, seasons: list[str], __: object) -> pd.DataFrame:
+        requested.append(list(seasons))
+        return simulated_cache
+
+    clean_environment.setattr(cli, "load_available", load_available)
+    args = ["predict", "--home", "Team 00", "--away", "Team 01", "--as-of", "2027-08-20"]
+    cli.main(args)
+    assert requested == [["2425", "2526", "2627", "2728"]]
+
+
 def test_predict_refuses_teams_with_little_history(
     simulated_cache: pd.DataFrame, capsys: pytest.CaptureFixture[str]
 ) -> None:

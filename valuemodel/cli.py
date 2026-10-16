@@ -331,7 +331,7 @@ def run_predict(
     quoted: dict[str, float],
 ) -> int:
     settings = load_settings()
-    seasons = [*DEFAULT_SEASONS, current_season()]
+    seasons = history_seasons([current_season(None if as_of is None else as_of.date())])
     matches = load_available(linked_leagues(league), seasons, settings)
     if matches.empty:
         raise FileNotFoundError(f"No cached data for {league}. Run: valuemodel download")

@@ -266,8 +266,11 @@ def test_calculator_lists_each_game_once_with_its_odds() -> None:
 SCHEDULE_TEAMS = ["Arsenal", "Leeds", "Chelsea", "Fulham", "Everton", "Brentford", "Hull", "Wolves"]
 
 
-def write_schedule(settings: Settings, today: date) -> None:
-    """Cache this season's results for eight real names and a schedule of games after today."""
+def write_schedule(settings: Settings, today: date, results_season: str | None = None) -> None:
+    """Cache results for eight real names and this season's schedule of games after today.
+
+    The results are filed under this season unless results_season names another.
+    """
     season = current_season(today)
     rng = np.random.default_rng(5)
     model = true_model(len(SCHEDULE_TEAMS), -0.1, rng)
@@ -276,7 +279,8 @@ def write_schedule(settings: Settings, today: date) -> None:
     names = dict(zip(model.teams, SCHEDULE_TEAMS, strict=True))
     history[["home_team", "away_team"]] = history[["home_team", "away_team"]].replace(names)
     settings.raw_dir.mkdir(parents=True, exist_ok=True)
-    (settings.raw_dir / f"E0_{season}.csv").write_text(raw_season(history), encoding="utf-8")
+    results_file = settings.raw_dir / f"E0_{results_season or season}.csv"
+    results_file.write_text(raw_season(history), encoding="utf-8")
 
     full = {short: long for long, short in SCHEDULE_NAMES.items()}
     games = [
@@ -322,6 +326,15 @@ def test_schedule_view_shows_the_next_rounds(settings: Settings) -> None:
     # Sunderland have no results in the cache, so the game is listed but not priced.
     assert not chelsea.reliable and chelsea.cells == []
     assert len(views.schedule_view(settings, views.ALL_ROUNDS, today).rows["E0"]) == 4
+
+
+def test_schedule_view_uses_last_season_before_this_one_has_results(settings: Settings) -> None:
+    """In August the new season has no results yet, so the fit rests on the season before."""
+    today = date(2027, 8, 15)
+    write_schedule(settings, today, results_season="2627")
+    view = views.schedule_view(settings, rounds=3, today=today)
+    assert not view.problems
+    assert view.rows["E0"][0].reliable
 
 
 def test_schedule_view_names_leagues_it_cannot_show(settings: Settings) -> None:
